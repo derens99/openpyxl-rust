@@ -46,6 +46,28 @@ fn xlsx_err(e: XlsxError) -> PyErr {
     pyo3::exceptions::PyRuntimeError::new_err(e.to_string())
 }
 
+fn date_to_excel_serial(year: i32, month: i32, day: i32) -> f64 {
+    let mut y = year;
+    let mut m = month;
+    if m <= 2 {
+        y -= 1;
+        m += 12;
+    }
+    let a = y / 100;
+    let b = 2 - a + a / 4;
+    let jd = (365.25 * (y + 4716) as f64) as i64
+        + (30.6001 * (m + 1) as f64) as i64
+        + day as i64
+        + b as i64
+        - 1524;
+    let excel_epoch_jd: i64 = 2415019;
+    let mut serial = (jd - excel_epoch_jd) as f64;
+    if serial > 59.0 {
+        serial += 1.0;
+    }
+    serial
+}
+
 #[pyfunction]
 fn _save_workbook(py: Python<'_>, data: &Bound<'_, PyDict>) -> PyResult<PyObject> {
     let mut workbook = Workbook::new();
@@ -83,6 +105,165 @@ fn _save_workbook(py: Python<'_>, data: &Bound<'_, PyDict>) -> PyResult<PyObject
                 }
             }
 
+            // Alignment
+            if let Ok(Some(align_obj)) = cell.get_item("alignment") {
+                let align: &Bound<'_, PyDict> = align_obj.downcast()?;
+                if let Ok(Some(h)) = align.get_item("horizontal") {
+                    let hs: String = h.extract()?;
+                    let a = match hs.as_str() {
+                        "center" => rust_xlsxwriter::FormatAlign::Center,
+                        "right" => rust_xlsxwriter::FormatAlign::Right,
+                        "left" => rust_xlsxwriter::FormatAlign::Left,
+                        "fill" => rust_xlsxwriter::FormatAlign::Fill,
+                        "justify" => rust_xlsxwriter::FormatAlign::Justify,
+                        "centerContinuous" | "center_continuous" => rust_xlsxwriter::FormatAlign::CenterAcross,
+                        "distributed" => rust_xlsxwriter::FormatAlign::Distributed,
+                        _ => rust_xlsxwriter::FormatAlign::General,
+                    };
+                    fmt = fmt.set_align(a);
+                }
+                if let Ok(Some(v)) = align.get_item("vertical") {
+                    let vs: String = v.extract()?;
+                    let a = match vs.as_str() {
+                        "center" => rust_xlsxwriter::FormatAlign::VerticalCenter,
+                        "top" => rust_xlsxwriter::FormatAlign::Top,
+                        "bottom" => rust_xlsxwriter::FormatAlign::Bottom,
+                        "justify" => rust_xlsxwriter::FormatAlign::VerticalJustify,
+                        "distributed" => rust_xlsxwriter::FormatAlign::VerticalDistributed,
+                        _ => rust_xlsxwriter::FormatAlign::Bottom,
+                    };
+                    fmt = fmt.set_align(a);
+                }
+                if let Ok(Some(wt)) = align.get_item("wrap_text") {
+                    if wt.extract::<bool>()? {
+                        fmt = fmt.set_text_wrap();
+                    }
+                }
+                if let Ok(Some(sf)) = align.get_item("shrink_to_fit") {
+                    if sf.extract::<bool>()? {
+                        fmt = fmt.set_shrink();
+                    }
+                }
+                if let Ok(Some(ind)) = align.get_item("indent") {
+                    let i: u8 = ind.extract()?;
+                    if i > 0 {
+                        fmt = fmt.set_indent(i);
+                    }
+                }
+                if let Ok(Some(rot)) = align.get_item("text_rotation") {
+                    let r: i16 = rot.extract()?;
+                    if r != 0 {
+                        fmt = fmt.set_rotation(r);
+                    }
+                }
+                has_format = true;
+            }
+
+            // Border
+            if let Ok(Some(border_obj)) = cell.get_item("border") {
+                let border: &Bound<'_, PyDict> = border_obj.downcast()?;
+
+                fn parse_border_style(s: &str) -> rust_xlsxwriter::FormatBorder {
+                    match s {
+                        "thin" => rust_xlsxwriter::FormatBorder::Thin,
+                        "medium" => rust_xlsxwriter::FormatBorder::Medium,
+                        "thick" => rust_xlsxwriter::FormatBorder::Thick,
+                        "dashed" => rust_xlsxwriter::FormatBorder::Dashed,
+                        "dotted" => rust_xlsxwriter::FormatBorder::Dotted,
+                        "double" => rust_xlsxwriter::FormatBorder::Double,
+                        "hair" => rust_xlsxwriter::FormatBorder::Hair,
+                        "mediumDashed" => rust_xlsxwriter::FormatBorder::MediumDashed,
+                        "dashDot" => rust_xlsxwriter::FormatBorder::DashDot,
+                        "mediumDashDot" => rust_xlsxwriter::FormatBorder::MediumDashDot,
+                        "dashDotDot" => rust_xlsxwriter::FormatBorder::DashDotDot,
+                        "mediumDashDotDot" => rust_xlsxwriter::FormatBorder::MediumDashDotDot,
+                        "slantDashDot" => rust_xlsxwriter::FormatBorder::SlantDashDot,
+                        _ => rust_xlsxwriter::FormatBorder::Thin,
+                    }
+                }
+
+                fn parse_color(c: &str) -> Option<rust_xlsxwriter::Color> {
+                    u32::from_str_radix(c, 16).ok().map(rust_xlsxwriter::Color::from)
+                }
+
+                if let Ok(Some(left_obj)) = border.get_item("left") {
+                    let left: &Bound<'_, PyDict> = left_obj.downcast()?;
+                    if let Ok(Some(style)) = left.get_item("style") {
+                        fmt = fmt.set_border_left(parse_border_style(&style.extract::<String>()?));
+                    }
+                    if let Ok(Some(color)) = left.get_item("color") {
+                        if let Some(clr) = parse_color(&color.extract::<String>()?) {
+                            fmt = fmt.set_border_left_color(clr);
+                        }
+                    }
+                }
+                if let Ok(Some(right_obj)) = border.get_item("right") {
+                    let right: &Bound<'_, PyDict> = right_obj.downcast()?;
+                    if let Ok(Some(style)) = right.get_item("style") {
+                        fmt = fmt.set_border_right(parse_border_style(&style.extract::<String>()?));
+                    }
+                    if let Ok(Some(color)) = right.get_item("color") {
+                        if let Some(clr) = parse_color(&color.extract::<String>()?) {
+                            fmt = fmt.set_border_right_color(clr);
+                        }
+                    }
+                }
+                if let Ok(Some(top_obj)) = border.get_item("top") {
+                    let top: &Bound<'_, PyDict> = top_obj.downcast()?;
+                    if let Ok(Some(style)) = top.get_item("style") {
+                        fmt = fmt.set_border_top(parse_border_style(&style.extract::<String>()?));
+                    }
+                    if let Ok(Some(color)) = top.get_item("color") {
+                        if let Some(clr) = parse_color(&color.extract::<String>()?) {
+                            fmt = fmt.set_border_top_color(clr);
+                        }
+                    }
+                }
+                if let Ok(Some(bottom_obj)) = border.get_item("bottom") {
+                    let bottom: &Bound<'_, PyDict> = bottom_obj.downcast()?;
+                    if let Ok(Some(style)) = bottom.get_item("style") {
+                        fmt = fmt.set_border_bottom(parse_border_style(&style.extract::<String>()?));
+                    }
+                    if let Ok(Some(color)) = bottom.get_item("color") {
+                        if let Some(clr) = parse_color(&color.extract::<String>()?) {
+                            fmt = fmt.set_border_bottom_color(clr);
+                        }
+                    }
+                }
+                has_format = true;
+            }
+
+            // Fill
+            if let Ok(Some(fill_obj)) = cell.get_item("fill") {
+                let fill: &Bound<'_, PyDict> = fill_obj.downcast()?;
+                if let Ok(Some(ft)) = fill.get_item("fill_type") {
+                    let fts: String = ft.extract()?;
+                    let pattern = match fts.as_str() {
+                        "solid" => rust_xlsxwriter::FormatPattern::Solid,
+                        "darkGray" => rust_xlsxwriter::FormatPattern::DarkGray,
+                        "mediumGray" => rust_xlsxwriter::FormatPattern::MediumGray,
+                        "lightGray" => rust_xlsxwriter::FormatPattern::LightGray,
+                        "gray125" => rust_xlsxwriter::FormatPattern::Gray125,
+                        "gray0625" => rust_xlsxwriter::FormatPattern::Gray0625,
+                        _ => rust_xlsxwriter::FormatPattern::Solid,
+                    };
+                    fmt = fmt.set_pattern(pattern);
+                }
+                if let Ok(Some(sc)) = fill.get_item("start_color") {
+                    let c: String = sc.extract()?;
+                    if let Ok(rgb) = u32::from_str_radix(&c, 16) {
+                        fmt = fmt.set_background_color(rust_xlsxwriter::Color::from(rgb));
+                    }
+                }
+                if let Ok(Some(ec)) = fill.get_item("end_color") {
+                    let c: String = ec.extract()?;
+                    if let Ok(rgb) = u32::from_str_radix(&c, 16) {
+                        fmt = fmt.set_foreground_color(rust_xlsxwriter::Color::from(rgb));
+                    }
+                }
+                has_format = true;
+            }
+
             if let Ok(Some(nf)) = cell.get_item("number_format") {
                 let nf_str: String = nf.extract()?;
                 if nf_str != "General" {
@@ -92,6 +273,33 @@ fn _save_workbook(py: Python<'_>, data: &Bound<'_, PyDict>) -> PyResult<PyObject
             }
 
             let value_obj = cell.get_item("value")?.unwrap();
+
+            // Check for datetime/date dict FIRST
+            if let Ok(dt_dict) = value_obj.downcast::<PyDict>() {
+                if let Ok(Some(type_obj)) = dt_dict.get_item("__type__") {
+                    let type_str: String = type_obj.extract()?;
+                    let year: i32 = dt_dict.get_item("year")?.unwrap().extract()?;
+                    let month: i32 = dt_dict.get_item("month")?.unwrap().extract()?;
+                    let day: i32 = dt_dict.get_item("day")?.unwrap().extract()?;
+                    let serial = date_to_excel_serial(year, month, day);
+
+                    let value = if type_str == "datetime" {
+                        let hour: i32 = dt_dict.get_item("hour")?.unwrap().extract()?;
+                        let minute: i32 = dt_dict.get_item("minute")?.unwrap().extract()?;
+                        let second: i32 = dt_dict.get_item("second")?.unwrap().extract()?;
+                        serial + (hour as f64 * 3600.0 + minute as f64 * 60.0 + second as f64) / 86400.0
+                    } else {
+                        serial
+                    };
+
+                    if has_format {
+                        worksheet.write_number_with_format(row, col, value, &fmt).map_err(xlsx_err)?;
+                    } else {
+                        worksheet.write_number(row, col, value).map_err(xlsx_err)?;
+                    }
+                    continue;
+                }
+            }
 
             if value_obj.is_none() {
                 // blank cell

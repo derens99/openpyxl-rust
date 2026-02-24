@@ -1,4 +1,5 @@
 import re
+from datetime import datetime, date
 from openpyxl_rust.cell import Cell, _col_letter
 
 
@@ -95,8 +96,29 @@ class Worksheet:
             cell_data = {
                 "row": row - 1,   # Rust uses 0-based
                 "col": col - 1,   # Rust uses 0-based
-                "value": cell.value,
             }
+
+            # Handle datetime/date values (datetime check MUST come first
+            # because datetime is a subclass of date)
+            if isinstance(cell.value, datetime):
+                cell_data["value"] = {"__type__": "datetime",
+                                      "year": cell.value.year,
+                                      "month": cell.value.month,
+                                      "day": cell.value.day,
+                                      "hour": cell.value.hour,
+                                      "minute": cell.value.minute,
+                                      "second": cell.value.second}
+                if cell.number_format == "General":
+                    cell_data["number_format"] = "yyyy-mm-dd hh:mm:ss"
+            elif isinstance(cell.value, date):
+                cell_data["value"] = {"__type__": "date",
+                                      "year": cell.value.year,
+                                      "month": cell.value.month,
+                                      "day": cell.value.day}
+                if cell.number_format == "General":
+                    cell_data["number_format"] = "yyyy-mm-dd"
+            else:
+                cell_data["value"] = cell.value
             if cell.font is not None:
                 font_data = {
                     "bold": cell.font.bold,
@@ -109,7 +131,44 @@ class Worksheet:
                 if cell.font.color is not None:
                     font_data["color"] = cell.font.color
                 cell_data["font"] = font_data
-            if cell.number_format != "General":
+            if cell.alignment is not None:
+                align_data = {}
+                if cell.alignment.horizontal is not None:
+                    align_data["horizontal"] = cell.alignment.horizontal
+                if cell.alignment.vertical is not None:
+                    align_data["vertical"] = cell.alignment.vertical
+                if cell.alignment.wrap_text:
+                    align_data["wrap_text"] = True
+                if cell.alignment.shrink_to_fit:
+                    align_data["shrink_to_fit"] = True
+                if cell.alignment.indent:
+                    align_data["indent"] = cell.alignment.indent
+                if cell.alignment.text_rotation:
+                    align_data["text_rotation"] = cell.alignment.text_rotation
+                if align_data:
+                    cell_data["alignment"] = align_data
+            if cell.border is not None:
+                border_data = {}
+                for side_name in ("left", "right", "top", "bottom"):
+                    side = getattr(cell.border, side_name)
+                    if side.style is not None:
+                        side_data = {"style": side.style}
+                        if side.color is not None:
+                            side_data["color"] = side.color
+                        border_data[side_name] = side_data
+                if border_data:
+                    cell_data["border"] = border_data
+            if cell.fill is not None:
+                fill_data = {}
+                if cell.fill.fill_type is not None:
+                    fill_data["fill_type"] = cell.fill.fill_type
+                if cell.fill.start_color is not None:
+                    fill_data["start_color"] = cell.fill.start_color
+                if cell.fill.end_color is not None:
+                    fill_data["end_color"] = cell.fill.end_color
+                if fill_data:
+                    cell_data["fill"] = fill_data
+            if cell.number_format != "General" and "number_format" not in cell_data:
                 cell_data["number_format"] = cell.number_format
             cells.append(cell_data)
 
