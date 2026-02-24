@@ -87,3 +87,69 @@ class Worksheet:
         if len(parts) != 2:
             raise ValueError(f"Invalid merge range: {range_string}")
         self.merged_cell_ranges.append((parts[0].upper(), parts[1].upper()))
+
+    def _to_save_dict(self):
+        """Serialize worksheet data for the Rust save engine."""
+        cells = []
+        for (row, col), cell in self._cells.items():
+            cell_data = {
+                "row": row - 1,   # Rust uses 0-based
+                "col": col - 1,   # Rust uses 0-based
+                "value": cell.value,
+            }
+            if cell.font is not None:
+                font_data = {
+                    "bold": cell.font.bold,
+                    "italic": cell.font.italic,
+                    "name": cell.font.name,
+                    "size": cell.font.size,
+                }
+                if cell.font.underline is not None:
+                    font_data["underline"] = cell.font.underline
+                if cell.font.color is not None:
+                    font_data["color"] = cell.font.color
+                cell_data["font"] = font_data
+            if cell.number_format != "General":
+                cell_data["number_format"] = cell.number_format
+            cells.append(cell_data)
+
+        # Column widths: convert letter key to 0-based index
+        col_widths = {}
+        for letter, dim in self.column_dimensions.items():
+            if dim.width is not None:
+                _, col_idx = _parse_cell_ref(f"{letter}1")
+                col_widths[col_idx - 1] = dim.width
+
+        # Row heights: convert 1-based to 0-based
+        row_heights = {}
+        for row_num, dim in self.row_dimensions.items():
+            if dim.height is not None:
+                row_heights[row_num - 1] = dim.height
+
+        # Freeze panes
+        freeze = None
+        if self.freeze_panes:
+            r, c = _parse_cell_ref(self.freeze_panes)
+            freeze = [r - 1, c - 1]
+
+        # Merged cells: convert refs to 0-based [r1, c1, r2, c2]
+        merges = []
+        for start_ref, end_ref in self.merged_cell_ranges:
+            r1, c1 = _parse_cell_ref(start_ref)
+            r2, c2 = _parse_cell_ref(end_ref)
+            merges.append([r1 - 1, c1 - 1, r2 - 1, c2 - 1])
+
+        result = {
+            "title": self.title,
+            "cells": cells,
+        }
+        if col_widths:
+            result["column_widths"] = col_widths
+        if row_heights:
+            result["row_heights"] = row_heights
+        if freeze is not None:
+            result["freeze_panes"] = freeze
+        if merges:
+            result["merged_cells"] = merges
+
+        return result
