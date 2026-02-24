@@ -60,7 +60,7 @@ fn date_to_excel_serial(year: i32, month: i32, day: i32) -> f64 {
         + day as i64
         + b as i64
         - 1524;
-    let excel_epoch_jd: i64 = 2415019;
+    let excel_epoch_jd: i64 = 2415020;
     let mut serial = (jd - excel_epoch_jd) as f64;
     if serial > 59.0 {
         serial += 1.0;
