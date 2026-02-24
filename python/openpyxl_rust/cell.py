@@ -14,6 +14,9 @@ class Cell:
         self.value = value
         self.font = None
         self.number_format = "General"
+        self.alignment = None
+        self.border = None
+        self.fill = None
 
     @property
     def coordinate(self):
