@@ -115,7 +115,7 @@ class Workbook:
 
     def save(self, filename):
         for ws in self._sheets:
-            ws._flush_formats()
+            ws._flush_metadata()
         if isinstance(filename, (str, bytes, os.PathLike)):
             self._rust_wb.save(str(filename))
         else:

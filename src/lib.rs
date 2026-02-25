@@ -1,6 +1,6 @@
 // src/lib.rs
 use pyo3::prelude::*;
-use pyo3::types::{PyAnyMethods, PyBytes, PyDict, PyList, PyTuple};
+use pyo3::types::{PyAnyMethods, PyBytes, PyDict, PyList};
 use rust_xlsxwriter::{Format, Formula, Workbook, XlsxError};
 use calamine::{open_workbook, Reader, Xlsx, Data};
 
@@ -17,14 +17,85 @@ enum CellData {
     Number(f64),
     Boolean(bool),
     Formula(String),
-    DateTime { serial: f64, is_date_only: bool },
+    DateTime(f64),
     Empty,
+}
+
+#[derive(Clone, Debug)]
+struct CellFormat {
+    font_bold: bool,
+    font_italic: bool,
+    font_name: Option<String>,
+    font_size: Option<f64>,
+    font_color: Option<String>,
+    font_underline: Option<u8>,    // 0=none, 1=single, 2=double
+    font_strikethrough: bool,
+    font_vert_align: Option<u8>,   // 1=superscript, 2=subscript
+    number_format: Option<String>,
+    align_horizontal: Option<u8>,  // 1=left,2=center,3=right,4=fill,5=justify,6=centerAcross,7=distributed
+    align_vertical: Option<u8>,    // 1=top,2=center,3=bottom,4=justify,5=distributed
+    align_wrap_text: bool,
+    align_shrink_to_fit: bool,
+    align_indent: u8,
+    align_text_rotation: i16,
+    fill_type: Option<u8>,         // 1=solid,2=darkGray,3=mediumGray,4=lightGray,5=gray125,6=gray0625
+    fill_start_color: Option<String>,
+    fill_end_color: Option<String>,
+    border_left_style: Option<u8>,
+    border_left_color: Option<String>,
+    border_right_style: Option<u8>,
+    border_right_color: Option<String>,
+    border_top_style: Option<u8>,
+    border_top_color: Option<String>,
+    border_bottom_style: Option<u8>,
+    border_bottom_color: Option<String>,
+    border_diagonal_style: Option<u8>,
+    border_diagonal_color: Option<String>,
+    border_diagonal_up: bool,
+    border_diagonal_down: bool,
+}
+
+impl Default for CellFormat {
+    fn default() -> Self {
+        CellFormat {
+            font_bold: false,
+            font_italic: false,
+            font_name: None,
+            font_size: None,
+            font_color: None,
+            font_underline: None,
+            font_strikethrough: false,
+            font_vert_align: None,
+            number_format: None,
+            align_horizontal: None,
+            align_vertical: None,
+            align_wrap_text: false,
+            align_shrink_to_fit: false,
+            align_indent: 0,
+            align_text_rotation: 0,
+            fill_type: None,
+            fill_start_color: None,
+            fill_end_color: None,
+            border_left_style: None,
+            border_left_color: None,
+            border_right_style: None,
+            border_right_color: None,
+            border_top_style: None,
+            border_top_color: None,
+            border_bottom_style: None,
+            border_bottom_color: None,
+            border_diagonal_style: None,
+            border_diagonal_color: None,
+            border_diagonal_up: false,
+            border_diagonal_down: false,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
 struct CellValue {
     value: CellData,
-    format_json: Option<String>,
+    format: CellFormat,
 }
 
 #[derive(Clone, Debug)]
@@ -277,6 +348,222 @@ fn build_format_from_json(json_str: &str) -> Result<Format, String> {
 }
 
 // =====================================================================
+// CellFormat -> rust_xlsxwriter::Format conversion
+// =====================================================================
+
+fn border_style_from_u8(v: u8) -> rust_xlsxwriter::FormatBorder {
+    match v {
+        1 => rust_xlsxwriter::FormatBorder::Thin,
+        2 => rust_xlsxwriter::FormatBorder::Medium,
+        3 => rust_xlsxwriter::FormatBorder::Thick,
+        4 => rust_xlsxwriter::FormatBorder::Dashed,
+        5 => rust_xlsxwriter::FormatBorder::Dotted,
+        6 => rust_xlsxwriter::FormatBorder::Double,
+        7 => rust_xlsxwriter::FormatBorder::Hair,
+        8 => rust_xlsxwriter::FormatBorder::MediumDashed,
+        9 => rust_xlsxwriter::FormatBorder::DashDot,
+        10 => rust_xlsxwriter::FormatBorder::MediumDashDot,
+        11 => rust_xlsxwriter::FormatBorder::DashDotDot,
+        12 => rust_xlsxwriter::FormatBorder::MediumDashDotDot,
+        13 => rust_xlsxwriter::FormatBorder::SlantDashDot,
+        _ => rust_xlsxwriter::FormatBorder::Thin,
+    }
+}
+
+fn fill_pattern_from_u8(v: u8) -> rust_xlsxwriter::FormatPattern {
+    match v {
+        1 => rust_xlsxwriter::FormatPattern::Solid,
+        2 => rust_xlsxwriter::FormatPattern::DarkGray,
+        3 => rust_xlsxwriter::FormatPattern::MediumGray,
+        4 => rust_xlsxwriter::FormatPattern::LightGray,
+        5 => rust_xlsxwriter::FormatPattern::Gray125,
+        6 => rust_xlsxwriter::FormatPattern::Gray0625,
+        _ => rust_xlsxwriter::FormatPattern::Solid,
+    }
+}
+
+fn cell_format_to_xlsx_format(cf: &CellFormat) -> (Format, bool) {
+    let mut fmt = Format::new();
+    let mut has_format = false;
+
+    // Font
+    if cf.font_bold {
+        fmt = fmt.set_bold();
+        has_format = true;
+    }
+    if cf.font_italic {
+        fmt = fmt.set_italic();
+        has_format = true;
+    }
+    if let Some(ref name) = cf.font_name {
+        fmt = fmt.set_font_name(name);
+        has_format = true;
+    }
+    if let Some(size) = cf.font_size {
+        fmt = fmt.set_font_size(size);
+        has_format = true;
+    }
+    if let Some(ref color) = cf.font_color {
+        if let Some(clr) = parse_color_str(color) {
+            fmt = fmt.set_font_color(clr);
+            has_format = true;
+        }
+    }
+    if let Some(ul) = cf.font_underline {
+        match ul {
+            1 => { fmt = fmt.set_underline(rust_xlsxwriter::FormatUnderline::Single); has_format = true; }
+            2 => { fmt = fmt.set_underline(rust_xlsxwriter::FormatUnderline::Double); has_format = true; }
+            _ => {}
+        }
+    }
+    if cf.font_strikethrough {
+        fmt = fmt.set_font_strikethrough();
+        has_format = true;
+    }
+    if let Some(va) = cf.font_vert_align {
+        match va {
+            1 => { fmt = fmt.set_font_script(rust_xlsxwriter::FormatScript::Superscript); has_format = true; }
+            2 => { fmt = fmt.set_font_script(rust_xlsxwriter::FormatScript::Subscript); has_format = true; }
+            _ => {}
+        }
+    }
+
+    // Number format
+    if let Some(ref nf) = cf.number_format {
+        if nf != "General" {
+            fmt = fmt.set_num_format(nf);
+            has_format = true;
+        }
+    }
+
+    // Alignment
+    if let Some(h) = cf.align_horizontal {
+        let a = match h {
+            1 => rust_xlsxwriter::FormatAlign::Left,
+            2 => rust_xlsxwriter::FormatAlign::Center,
+            3 => rust_xlsxwriter::FormatAlign::Right,
+            4 => rust_xlsxwriter::FormatAlign::Fill,
+            5 => rust_xlsxwriter::FormatAlign::Justify,
+            6 => rust_xlsxwriter::FormatAlign::CenterAcross,
+            7 => rust_xlsxwriter::FormatAlign::Distributed,
+            _ => rust_xlsxwriter::FormatAlign::General,
+        };
+        fmt = fmt.set_align(a);
+        has_format = true;
+    }
+    if let Some(v) = cf.align_vertical {
+        let a = match v {
+            1 => rust_xlsxwriter::FormatAlign::Top,
+            2 => rust_xlsxwriter::FormatAlign::VerticalCenter,
+            3 => rust_xlsxwriter::FormatAlign::Bottom,
+            4 => rust_xlsxwriter::FormatAlign::VerticalJustify,
+            5 => rust_xlsxwriter::FormatAlign::VerticalDistributed,
+            _ => rust_xlsxwriter::FormatAlign::Bottom,
+        };
+        fmt = fmt.set_align(a);
+        has_format = true;
+    }
+    if cf.align_wrap_text {
+        fmt = fmt.set_text_wrap();
+        has_format = true;
+    }
+    if cf.align_shrink_to_fit {
+        fmt = fmt.set_shrink();
+        has_format = true;
+    }
+    if cf.align_indent > 0 {
+        fmt = fmt.set_indent(cf.align_indent);
+        has_format = true;
+    }
+    if cf.align_text_rotation != 0 {
+        fmt = fmt.set_rotation(cf.align_text_rotation);
+        has_format = true;
+    }
+
+    // Fill
+    if let Some(ft) = cf.fill_type {
+        fmt = fmt.set_pattern(fill_pattern_from_u8(ft));
+        has_format = true;
+    }
+    if let Some(ref sc) = cf.fill_start_color {
+        if let Some(clr) = parse_color_str(sc) {
+            fmt = fmt.set_background_color(clr);
+            has_format = true;
+        }
+    }
+    if let Some(ref ec) = cf.fill_end_color {
+        if let Some(clr) = parse_color_str(ec) {
+            fmt = fmt.set_foreground_color(clr);
+            has_format = true;
+        }
+    }
+
+    // Border
+    if let Some(s) = cf.border_left_style {
+        fmt = fmt.set_border_left(border_style_from_u8(s));
+        has_format = true;
+    }
+    if let Some(ref c) = cf.border_left_color {
+        if let Some(clr) = parse_color_str(c) {
+            fmt = fmt.set_border_left_color(clr);
+            has_format = true;
+        }
+    }
+    if let Some(s) = cf.border_right_style {
+        fmt = fmt.set_border_right(border_style_from_u8(s));
+        has_format = true;
+    }
+    if let Some(ref c) = cf.border_right_color {
+        if let Some(clr) = parse_color_str(c) {
+            fmt = fmt.set_border_right_color(clr);
+            has_format = true;
+        }
+    }
+    if let Some(s) = cf.border_top_style {
+        fmt = fmt.set_border_top(border_style_from_u8(s));
+        has_format = true;
+    }
+    if let Some(ref c) = cf.border_top_color {
+        if let Some(clr) = parse_color_str(c) {
+            fmt = fmt.set_border_top_color(clr);
+            has_format = true;
+        }
+    }
+    if let Some(s) = cf.border_bottom_style {
+        fmt = fmt.set_border_bottom(border_style_from_u8(s));
+        has_format = true;
+    }
+    if let Some(ref c) = cf.border_bottom_color {
+        if let Some(clr) = parse_color_str(c) {
+            fmt = fmt.set_border_bottom_color(clr);
+            has_format = true;
+        }
+    }
+    if let Some(s) = cf.border_diagonal_style {
+        fmt = fmt.set_border_diagonal(border_style_from_u8(s));
+        has_format = true;
+    }
+    if let Some(ref c) = cf.border_diagonal_color {
+        if let Some(clr) = parse_color_str(c) {
+            fmt = fmt.set_border_diagonal_color(clr);
+            has_format = true;
+        }
+    }
+    if cf.border_diagonal_up || cf.border_diagonal_down {
+        let diag_type = match (cf.border_diagonal_up, cf.border_diagonal_down) {
+            (true, true) => rust_xlsxwriter::FormatDiagonalBorder::BorderUpDown,
+            (true, false) => rust_xlsxwriter::FormatDiagonalBorder::BorderUp,
+            (false, true) => rust_xlsxwriter::FormatDiagonalBorder::BorderDown,
+            _ => unreachable!(),
+        };
+        fmt = fmt.set_border_diagonal_type(diag_type);
+        has_format = true;
+    }
+
+    (fmt, has_format)
+}
+
+// =====================================================================
 // RustWorkbook PyO3 class
 // =====================================================================
 
@@ -341,7 +628,7 @@ impl RustWorkbook {
         if let Some(cv) = sd.cells.get_mut(&key) {
             cv.value = cell_data;
         } else {
-            sd.cells.insert(key, CellValue { value: cell_data, format_json: None });
+            sd.cells.insert(key, CellValue { value: cell_data, format: CellFormat::default() });
         }
         Ok(())
     }
@@ -353,7 +640,7 @@ impl RustWorkbook {
         if let Some(cv) = sd.cells.get_mut(&key) {
             cv.value = CellData::Number(value);
         } else {
-            sd.cells.insert(key, CellValue { value: CellData::Number(value), format_json: None });
+            sd.cells.insert(key, CellValue { value: CellData::Number(value), format: CellFormat::default() });
         }
         Ok(())
     }
@@ -365,20 +652,19 @@ impl RustWorkbook {
         if let Some(cv) = sd.cells.get_mut(&key) {
             cv.value = CellData::Boolean(value);
         } else {
-            sd.cells.insert(key, CellValue { value: CellData::Boolean(value), format_json: None });
+            sd.cells.insert(key, CellValue { value: CellData::Boolean(value), format: CellFormat::default() });
         }
         Ok(())
     }
 
-    fn set_cell_datetime(&mut self, sheet: usize, row: u32, col: u16, serial: f64, is_date_only: bool) -> PyResult<()> {
+    fn set_cell_datetime(&mut self, sheet: usize, row: u32, col: u16, serial: f64) -> PyResult<()> {
         let sd = self.sheets.get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
         let key = (row, col);
-        let cell_data = CellData::DateTime { serial, is_date_only };
         if let Some(cv) = sd.cells.get_mut(&key) {
-            cv.value = cell_data;
+            cv.value = CellData::DateTime(serial);
         } else {
-            sd.cells.insert(key, CellValue { value: cell_data, format_json: None });
+            sd.cells.insert(key, CellValue { value: CellData::DateTime(serial), format: CellFormat::default() });
         }
         Ok(())
     }
@@ -390,42 +676,7 @@ impl RustWorkbook {
         if let Some(cv) = sd.cells.get_mut(&key) {
             cv.value = CellData::Empty;
         } else {
-            sd.cells.insert(key, CellValue { value: CellData::Empty, format_json: None });
-        }
-        Ok(())
-    }
-
-    fn set_cell_format(&mut self, sheet: usize, row: u32, col: u16, format_json: String) -> PyResult<()> {
-        let sd = self.sheets.get_mut(sheet)
-            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
-        let key = (row, col);
-        if let Some(cv) = sd.cells.get_mut(&key) {
-            cv.format_json = Some(format_json);
-        } else {
-            // Cell doesn't have a value yet, create it as Empty with format
-            sd.cells.insert(key, CellValue { value: CellData::Empty, format_json: Some(format_json) });
-        }
-        Ok(())
-    }
-
-    /// Batch-set cell formats. Each item in the list is a tuple (row, col, format_json).
-    fn set_cell_formats_batch(&mut self, sheet: usize, formats: &Bound<'_, PyList>) -> PyResult<()> {
-        let sd = self.sheets.get_mut(sheet)
-            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
-
-        for item in formats.iter() {
-            let tuple: &Bound<'_, PyTuple> = item.downcast()
-                .map_err(|_| pyo3::exceptions::PyTypeError::new_err("Each format entry must be a tuple"))?;
-            let row: u32 = tuple.get_item(0)?.extract()?;
-            let col: u16 = tuple.get_item(1)?.extract()?;
-            let format_json: String = tuple.get_item(2)?.extract()?;
-
-            let key = (row, col);
-            if let Some(cv) = sd.cells.get_mut(&key) {
-                cv.format_json = Some(format_json);
-            } else {
-                sd.cells.insert(key, CellValue { value: CellData::Empty, format_json: Some(format_json) });
-            }
+            sd.cells.insert(key, CellValue { value: CellData::Empty, format: CellFormat::default() });
         }
         Ok(())
     }
@@ -444,7 +695,7 @@ impl RustWorkbook {
                     Ok(owned.into_any().unbind())
                 },
                 CellData::Formula(f) => Ok(f.as_str().into_pyobject(py).unwrap().into_any().unbind()),
-                CellData::DateTime { serial, .. } => Ok((*serial).into_pyobject(py).unwrap().into_any().unbind()),
+                CellData::DateTime(serial) => Ok((*serial).into_pyobject(py).unwrap().into_any().unbind()),
                 CellData::Empty => Ok(py.None()),
             },
             None => Ok(py.None()),
@@ -587,10 +838,159 @@ impl RustWorkbook {
                 if let Some(cv) = sd.cells.get_mut(&key) {
                     cv.value = cell_data;
                 } else {
-                    sd.cells.insert(key, CellValue { value: cell_data, format_json: None });
+                    sd.cells.insert(key, CellValue { value: cell_data, format: CellFormat::default() });
                 }
             }
         }
+        Ok(())
+    }
+
+    fn set_cell_value(&mut self, _py: Python<'_>, sheet: usize, row: u32, col: u16, value: &Bound<'_, pyo3::PyAny>) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        let key = (row, col);
+        let cell_data = if value.is_none() {
+            CellData::Empty
+        } else if let Ok(b) = value.extract::<bool>() {
+            CellData::Boolean(b)
+        } else if let Ok(n) = value.extract::<f64>() {
+            CellData::Number(n)
+        } else if let Ok(s) = value.extract::<String>() {
+            if s.starts_with('=') {
+                CellData::Formula(s)
+            } else {
+                CellData::String(s)
+            }
+        } else {
+            CellData::Empty
+        };
+        let cv = sd.cells.entry(key).or_insert_with(|| CellValue { value: CellData::Empty, format: CellFormat::default() });
+        cv.value = cell_data;
+        Ok(())
+    }
+
+    fn set_cell_font(
+        &mut self,
+        sheet: usize,
+        row: u32,
+        col: u16,
+        bold: bool,
+        italic: bool,
+        name: Option<String>,
+        size: Option<f64>,
+        color: Option<String>,
+        underline: Option<u8>,
+        strikethrough: bool,
+        vert_align: Option<u8>,
+    ) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        let key = (row, col);
+        let cv = sd.cells.entry(key).or_insert_with(|| CellValue { value: CellData::Empty, format: CellFormat::default() });
+        cv.format.font_bold = bold;
+        cv.format.font_italic = italic;
+        cv.format.font_name = name;
+        cv.format.font_size = size;
+        cv.format.font_color = color;
+        cv.format.font_underline = underline;
+        cv.format.font_strikethrough = strikethrough;
+        cv.format.font_vert_align = vert_align;
+        Ok(())
+    }
+
+    fn set_cell_alignment(
+        &mut self,
+        sheet: usize,
+        row: u32,
+        col: u16,
+        horizontal: Option<u8>,
+        vertical: Option<u8>,
+        wrap_text: bool,
+        shrink_to_fit: bool,
+        indent: u8,
+        text_rotation: i16,
+    ) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        let key = (row, col);
+        let cv = sd.cells.entry(key).or_insert_with(|| CellValue { value: CellData::Empty, format: CellFormat::default() });
+        cv.format.align_horizontal = horizontal;
+        cv.format.align_vertical = vertical;
+        cv.format.align_wrap_text = wrap_text;
+        cv.format.align_shrink_to_fit = shrink_to_fit;
+        cv.format.align_indent = indent;
+        cv.format.align_text_rotation = text_rotation;
+        Ok(())
+    }
+
+    fn set_cell_fill(
+        &mut self,
+        sheet: usize,
+        row: u32,
+        col: u16,
+        fill_type: Option<u8>,
+        start_color: Option<String>,
+        end_color: Option<String>,
+    ) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        let key = (row, col);
+        let cv = sd.cells.entry(key).or_insert_with(|| CellValue { value: CellData::Empty, format: CellFormat::default() });
+        cv.format.fill_type = fill_type;
+        cv.format.fill_start_color = start_color;
+        cv.format.fill_end_color = end_color;
+        Ok(())
+    }
+
+    fn set_cell_border(
+        &mut self,
+        sheet: usize,
+        row: u32,
+        col: u16,
+        left_style: Option<u8>,
+        left_color: Option<String>,
+        right_style: Option<u8>,
+        right_color: Option<String>,
+        top_style: Option<u8>,
+        top_color: Option<String>,
+        bottom_style: Option<u8>,
+        bottom_color: Option<String>,
+        diag_style: Option<u8>,
+        diag_color: Option<String>,
+        diag_up: bool,
+        diag_down: bool,
+    ) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        let key = (row, col);
+        let cv = sd.cells.entry(key).or_insert_with(|| CellValue { value: CellData::Empty, format: CellFormat::default() });
+        cv.format.border_left_style = left_style;
+        cv.format.border_left_color = left_color;
+        cv.format.border_right_style = right_style;
+        cv.format.border_right_color = right_color;
+        cv.format.border_top_style = top_style;
+        cv.format.border_top_color = top_color;
+        cv.format.border_bottom_style = bottom_style;
+        cv.format.border_bottom_color = bottom_color;
+        cv.format.border_diagonal_style = diag_style;
+        cv.format.border_diagonal_color = diag_color;
+        cv.format.border_diagonal_up = diag_up;
+        cv.format.border_diagonal_down = diag_down;
+        Ok(())
+    }
+
+    fn set_cell_number_format(
+        &mut self,
+        sheet: usize,
+        row: u32,
+        col: u16,
+        format: String,
+    ) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        let key = (row, col);
+        let cv = sd.cells.entry(key).or_insert_with(|| CellValue { value: CellData::Empty, format: CellFormat::default() });
+        cv.format.number_format = Some(format);
         Ok(())
     }
 
@@ -603,23 +1003,7 @@ impl RustWorkbook {
 
             // Write cells
             for (&(row, col), cv) in &sd.cells {
-                // Build format
-                let mut has_format = false;
-                let mut fmt = Format::new();
-
-                if let Some(ref json_str) = cv.format_json {
-                    match build_format_from_json(json_str) {
-                        Ok(f) => {
-                            fmt = f;
-                            has_format = true;
-                        }
-                        Err(e) => {
-                            return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                                format!("Format error: {}", e)
-                            ));
-                        }
-                    }
-                }
+                let (fmt, has_format) = cell_format_to_xlsx_format(&cv.format);
 
                 match &cv.value {
                     CellData::String(s) => {
@@ -651,7 +1035,7 @@ impl RustWorkbook {
                             worksheet.write_formula(row, col, formula).map_err(xlsx_err)?;
                         }
                     }
-                    CellData::DateTime { serial, .. } => {
+                    CellData::DateTime(serial) => {
                         if has_format {
                             worksheet.write_number_with_format(row, col, *serial, &fmt).map_err(xlsx_err)?;
                         } else {
@@ -763,10 +1147,10 @@ impl RustWorkbook {
                     opts.edit_scenarios = !v;
                 }
 
+                worksheet.protect_with_options(&opts);
                 if let Some(pw) = password {
                     worksheet.protect_with_password(pw);
                 }
-                worksheet.protect_with_options(&opts);
             }
 
             // Page setup
