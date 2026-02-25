@@ -75,3 +75,17 @@ def test_patternfill_equality():
     f1 = PatternFill(fill_type="solid", start_color="FFFF00")
     f2 = PatternFill(fill_type="solid", start_color="FFFF00")
     assert f1 == f2
+
+
+def test_border_diagonal_defaults():
+    b = Border()
+    assert b.diagonal.style is None
+    assert b.diagonalUp is False
+    assert b.diagonalDown is False
+
+
+def test_border_diagonal_up():
+    b = Border(diagonal=Side(style="thin", color="FF0000"), diagonalUp=True)
+    assert b.diagonal.style == "thin"
+    assert b.diagonalUp is True
+    assert b.diagonalDown is False

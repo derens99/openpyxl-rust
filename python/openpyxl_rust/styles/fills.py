@@ -1,8 +1,25 @@
 class PatternFill:
-    def __init__(self, fill_type=None, start_color=None, end_color=None):
+    def __init__(self, fill_type=None, start_color=None, end_color=None,
+                 fgColor=None, bgColor=None):
         self.fill_type = fill_type
-        self.start_color = start_color
-        self.end_color = end_color
+        self.start_color = fgColor or start_color  # fgColor takes precedence
+        self.end_color = bgColor or end_color  # bgColor takes precedence
+
+    @property
+    def fgColor(self):
+        return self.start_color
+
+    @fgColor.setter
+    def fgColor(self, value):
+        self.start_color = value
+
+    @property
+    def bgColor(self):
+        return self.end_color
+
+    @bgColor.setter
+    def bgColor(self, value):
+        self.end_color = value
 
     def __eq__(self, other):
         if not isinstance(other, PatternFill):

@@ -5,8 +5,18 @@ build-backend = "maturin"
 [project]
 name = "openpyxl_rust"
 requires-python = ">=3.9"
-version = "0.1.0"
-description = "Rust-backed openpyxl-compatible Excel writer"
+version = "0.5.0"
+description = "Fast, Rust-backed openpyxl-compatible Excel writer"
+license = "MIT"
+readme = "README.md"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Office/Business :: Financial :: Spreadsheet",
+]
+keywords = ["excel", "xlsx", "openpyxl", "rust", "spreadsheet"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]

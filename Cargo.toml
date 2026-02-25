@@ -1,6 +1,6 @@
 [package]
 name = "openpyxl-rust"
-version = "0.1.0"
+version = "0.5.0"
 edition = "2021"
 
 [lib]
@@ -10,3 +10,5 @@ crate-type = ["cdylib"]
 [dependencies]
 pyo3 = { version = "0.24", features = ["extension-module"] }
 rust_xlsxwriter = "0.93"
+calamine = "0.26"
+serde_json = "1"

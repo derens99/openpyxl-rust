@@ -1,6 +1,37 @@
+# Rust
 /target
+
+# Python virtualenv
 /.venv
-__pycache__
+
+# Python bytecode
+__pycache__/
+*.py[cod]
 *.pyd
 *.so
 *.dll
+
+# Pytest
+.pytest_cache/
+
+# Packaging / build artifacts
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Generated reports (reproducible via generate_report.py)
+/reports/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temp xlsx files from tests/benchmarks
+*.xlsx

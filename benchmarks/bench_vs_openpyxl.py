@@ -94,6 +94,31 @@ def bench_formatted_rust(path, rows=10_000):
     wb.save(path)
 
 
+def bench_batch_data_rust(path, rows=100_000, cols=10):
+    """100k rows x 10 cols using batch append_rows API."""
+    from openpyxl_rust import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Data"
+    batch = []
+    for r in range(1, rows + 1):
+        row = []
+        for c in range(1, cols + 1):
+            if c % 3 == 0:
+                row.append(f"str_{r}_{c}")
+            elif c % 3 == 1:
+                row.append(r * c * 1.1)
+            else:
+                row.append(r % 2 == 0)
+        batch.append(row)
+        if len(batch) >= 10_000:
+            ws.append_rows(batch)
+            batch = []
+    if batch:
+        ws.append_rows(batch)
+    wb.save(path)
+
+
 def bench_multisheet_openpyxl(path, sheets=5, rows=20_000):
     """5 sheets x 20k rows each."""
     import openpyxl
@@ -112,8 +137,14 @@ def bench_multisheet_rust(path, sheets=5, rows=20_000):
     """5 sheets x 20k rows each."""
     from openpyxl_rust import Workbook
     wb = Workbook()
-    wb._sheets = []
-    for s in range(sheets):
+    # Rename default sheet as first sheet
+    ws = wb.active
+    ws.title = "Sheet1"
+    for r in range(1, rows + 1):
+        ws.cell(row=r, column=1, value=f"s0_r{r}")
+        ws.cell(row=r, column=2, value=r * 1.5)
+        ws.cell(row=r, column=3, value=r % 2 == 0)
+    for s in range(1, sheets):
         ws = wb.create_sheet(f"Sheet{s + 1}")
         for r in range(1, rows + 1):
             ws.cell(row=r, column=1, value=f"s{s}_r{r}")
@@ -160,6 +191,7 @@ def run_bench(name, fn_openpyxl, fn_rust):
 def main():
     benchmarks = [
         ("Large data (100k rows x 10 cols)", bench_large_data_openpyxl, bench_large_data_rust),
+        ("Batch data (100k rows x 10 cols)", bench_large_data_openpyxl, bench_batch_data_rust),
         ("Formatted (10k rows, styles)", bench_formatted_openpyxl, bench_formatted_rust),
         ("Multi-sheet (5 x 20k rows)", bench_multisheet_openpyxl, bench_multisheet_rust),
     ]

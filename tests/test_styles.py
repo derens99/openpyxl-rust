@@ -32,3 +32,31 @@ def test_font_inequality():
     f1 = Font(bold=True)
     f2 = Font(bold=False)
     assert f1 != f2
+
+
+def test_font_strikethrough():
+    f = Font(strikethrough=True)
+    assert f.strikethrough is True
+
+
+def test_font_strikethrough_default():
+    f = Font()
+    assert f.strikethrough is False
+
+
+def test_font_vertAlign_superscript():
+    f = Font(vertAlign="superscript")
+    assert f.vertAlign == "superscript"
+
+
+def test_font_vertAlign_default():
+    f = Font()
+    assert f.vertAlign is None
+
+
+def test_font_equality_with_new_fields():
+    f1 = Font(strikethrough=True, vertAlign="subscript")
+    f2 = Font(strikethrough=True, vertAlign="subscript")
+    assert f1 == f2
+    f3 = Font(strikethrough=False)
+    assert f1 != f3

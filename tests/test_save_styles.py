@@ -122,3 +122,79 @@ def test_compat_fill():
         assert "FFFF00" in cell.fill.start_color.rgb
     finally:
         os.unlink(path)
+
+
+def test_compat_font_strikethrough():
+    import openpyxl as real_openpyxl
+    wb = Workbook()
+    ws = wb.active
+    ws["A1"] = "Strike"
+    ws["A1"].font = Font(strikethrough=True)
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+        path = f.name
+    try:
+        wb.save(path)
+        rb = real_openpyxl.load_workbook(path)
+        assert rb.active["A1"].font.strikethrough is True
+    finally:
+        os.unlink(path)
+
+
+def test_compat_font_superscript():
+    import openpyxl as real_openpyxl
+    wb = Workbook()
+    ws = wb.active
+    ws["A1"] = "Super"
+    ws["A1"].font = Font(vertAlign="superscript")
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+        path = f.name
+    try:
+        wb.save(path)
+        rb = real_openpyxl.load_workbook(path)
+        assert rb.active["A1"].font.vertAlign == "superscript"
+    finally:
+        os.unlink(path)
+
+
+def test_compat_border_diagonal():
+    import openpyxl as real_openpyxl
+    wb = Workbook()
+    ws = wb.active
+    ws["A1"] = "Diag"
+    ws["A1"].border = Border(
+        diagonal=Side(style="thin"),
+        diagonalUp=True
+    )
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+        path = f.name
+    try:
+        wb.save(path)
+        rb = real_openpyxl.load_workbook(path)
+        cell = rb.active["A1"]
+        assert cell.border.diagonal.border_style == "thin"
+    finally:
+        os.unlink(path)
+
+
+def test_batch_format_many_cells():
+    """Verify batch format flush works with many formatted cells."""
+    import os, tempfile
+    from openpyxl_rust import Workbook
+    from openpyxl_rust.styles import Font
+    wb = Workbook()
+    ws = wb.active
+    bold = Font(bold=True)
+    for r in range(1, 101):
+        ws.cell(row=r, column=1, value=f"row{r}")
+        ws.cell(row=r, column=1).font = bold
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+        path = f.name
+    try:
+        wb.save(path)
+        assert os.path.getsize(path) > 0
+        import openpyxl
+        rb = openpyxl.load_workbook(path)
+        assert rb.active.cell(row=1, column=1).font.bold is True
+        assert rb.active.cell(row=100, column=1).font.bold is True
+    finally:
+        os.unlink(path)
