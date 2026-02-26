@@ -6,7 +6,7 @@ pub(crate) enum CellData {
     Number(f64),
     Boolean(bool),
     Formula(String),
-    DateTime(f64),
+    DateTime(f64, u8),  // (serial, kind: 0=date, 1=time, 2=datetime)
     Empty,
 }
 
@@ -103,6 +103,11 @@ pub(crate) struct SheetData {
     pub(crate) images: Vec<(u32, u16, Vec<u8>, Option<f64>, Option<f64>)>,  // (row, col, image_data, scale_width, scale_height)
     pub(crate) data_validations: Vec<String>,
     pub(crate) conditional_formats: Vec<String>,
+    pub(crate) min_row: Option<u32>,
+    pub(crate) max_row: Option<u32>,
+    pub(crate) min_col: Option<u16>,
+    pub(crate) max_col: Option<u16>,
+    pub(crate) append_row: u32,
 }
 
 impl SheetData {
@@ -122,6 +127,50 @@ impl SheetData {
             images: Vec::new(),
             data_validations: Vec::new(),
             conditional_formats: Vec::new(),
+            min_row: None,
+            max_row: None,
+            min_col: None,
+            max_col: None,
+            append_row: 0,
+        }
+    }
+
+    pub(crate) fn track_cell(&mut self, row: u32, col: u16) {
+        match self.min_row {
+            None => {
+                self.min_row = Some(row);
+                self.max_row = Some(row);
+                self.min_col = Some(col);
+                self.max_col = Some(col);
+            }
+            Some(mn) => {
+                if row < mn { self.min_row = Some(row); }
+                if row > self.max_row.unwrap() { self.max_row = Some(row); }
+                if col < self.min_col.unwrap() { self.min_col = Some(col); }
+                if col > self.max_col.unwrap() { self.max_col = Some(col); }
+            }
+        }
+    }
+
+    pub(crate) fn recompute_dimensions(&mut self) {
+        if self.cells.is_empty() {
+            self.min_row = None;
+            self.max_row = None;
+            self.min_col = None;
+            self.max_col = None;
+        } else {
+            let mut mn_r = u32::MAX; let mut mx_r = 0u32;
+            let mut mn_c = u16::MAX; let mut mx_c = 0u16;
+            for &(r, c) in self.cells.keys() {
+                if r < mn_r { mn_r = r; }
+                if r > mx_r { mx_r = r; }
+                if c < mn_c { mn_c = c; }
+                if c > mx_c { mx_c = c; }
+            }
+            self.min_row = Some(mn_r);
+            self.max_row = Some(mx_r);
+            self.min_col = Some(mn_c);
+            self.max_col = Some(mx_c);
         }
     }
 }

@@ -77,7 +77,10 @@ def _vert_align_to_u8(val):
 
 
 class Cell:
-    # Type constants matching openpyxl
+    __slots__ = ('_ws', '_row', '_col', '_value',
+                 '_font', '_number_format', '_alignment',
+                 '_border', '_fill', '_hyperlink', '_comment')
+
     TYPE_STRING = 's'
     TYPE_FORMULA = 'f'
     TYPE_NUMERIC = 'n'
@@ -87,21 +90,56 @@ class Cell:
     TYPE_ERROR = 'e'
     TYPE_FORMULA_CACHE_STRING = 's'
 
-    def __init__(self, row=1, column=1, value=None):
-        self.row = row
-        self.column = column
-        self.value = value
-        self.font = None
-        self.number_format = "General"
-        self.alignment = None
-        self.border = None
-        self.fill = None
-        self.hyperlink = None
-        self.comment = None
+    def __init__(self, row=1, column=1, value=None, worksheet=None):
+        self._ws = worksheet
+        self._row = row
+        self._col = column
+        self._value = None
+        self._font = None
+        self._number_format = "General"
+        self._alignment = None
+        self._border = None
+        self._fill = None
+        self._hyperlink = None
+        self._comment = None
+        if value is not None:
+            if worksheet is not None and worksheet._workbook is not None:
+                worksheet._set_cell_value(row, column, value)
+            else:
+                self._value = value
+
+    @property
+    def row(self):
+        return self._row
+
+    @row.setter
+    def row(self, val):
+        self._row = val
+
+    @property
+    def column(self):
+        return self._col
+
+    @column.setter
+    def column(self, val):
+        self._col = val
+
+    @property
+    def value(self):
+        if self._ws is not None and self._ws._workbook is not None:
+            return self._ws._get_cell_value(self._row, self._col)
+        return self._value
+
+    @value.setter
+    def value(self, val):
+        if self._ws is not None and self._ws._workbook is not None:
+            self._ws._set_cell_value(self._row, self._col, val)
+        else:
+            self._value = val
 
     @property
     def coordinate(self):
-        return f"{_col_letter(self.column)}{self.row}"
+        return f"{_col_letter(self._col)}{self._row}"
 
     @property
     def data_type(self):
@@ -119,3 +157,71 @@ class Cell:
                 return 'f'
             return 's'
         return 'n'
+
+    @property
+    def font(self):
+        return self._font
+
+    @font.setter
+    def font(self, val):
+        self._font = val
+        self._mark_formatted()
+
+    @property
+    def number_format(self):
+        return self._number_format
+
+    @number_format.setter
+    def number_format(self, val):
+        self._number_format = val
+        self._mark_formatted()
+
+    @property
+    def alignment(self):
+        return self._alignment
+
+    @alignment.setter
+    def alignment(self, val):
+        self._alignment = val
+        self._mark_formatted()
+
+    @property
+    def border(self):
+        return self._border
+
+    @border.setter
+    def border(self, val):
+        self._border = val
+        self._mark_formatted()
+
+    @property
+    def fill(self):
+        return self._fill
+
+    @fill.setter
+    def fill(self, val):
+        self._fill = val
+        self._mark_formatted()
+
+    @property
+    def hyperlink(self):
+        return self._hyperlink
+
+    @hyperlink.setter
+    def hyperlink(self, val):
+        self._hyperlink = val
+        self._mark_formatted()
+
+    @property
+    def comment(self):
+        return self._comment
+
+    @comment.setter
+    def comment(self, val):
+        self._comment = val
+        self._mark_formatted()
+
+    def _mark_formatted(self):
+        """Register this cell in the worksheet's formatted cells tracking."""
+        if self._ws is not None:
+            self._ws._formatted_cells[(self._row, self._col)] = self

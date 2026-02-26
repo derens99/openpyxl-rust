@@ -83,7 +83,6 @@ class _ConditionalFormattingList:
 
 
 class Worksheet:
-    # openpyxl compat constants
     ORIENTATION_PORTRAIT = "portrait"
     ORIENTATION_LANDSCAPE = "landscape"
     PAPERSIZE_LETTER = 1
@@ -95,9 +94,7 @@ class Worksheet:
         self._workbook = workbook
         self._sheet_idx = sheet_idx
         self._title = title
-        self._cell_cache = {}  # (row, col) -> Cell or raw value
-        self._current_row = 0  # 0 means no rows appended yet; next append goes to row 1
-        self._max_row = 0  # tracks highest row written, for O(1) _next_row()
+        self._formatted_cells = {}  # (row, col) -> Cell proxy, only for formatted cells
         self.column_dimensions = _ColumnDimensionsDict()
         self.row_dimensions = _RowDimensionsDict()
         self.freeze_panes = None
@@ -114,7 +111,6 @@ class Worksheet:
         self._data_validations = []
         self.conditional_formatting = _ConditionalFormattingList()
 
-        # If connected to a RustWorkbook, sync the title
         if workbook is not None and sheet_idx is not None:
             workbook._rust_wb.set_sheet_title(sheet_idx, title)
 
@@ -135,77 +131,174 @@ class Worksheet:
         if self._workbook is not None and self._sheet_idx is not None:
             self._workbook._rust_wb.set_sheet_title(self._sheet_idx, value)
 
+    # ---- Dimensions (from Rust, O(1)) ----
+
+    def _get_dims(self):
+        """Returns (min_row, min_col, max_row, max_col) as 1-based, or Nones."""
+        if self._workbook is None:
+            return None, None, None, None
+        dims = self._workbook._rust_wb.get_dimensions(self._sheet_idx)
+        if dims[0] is None:
+            return None, None, None, None
+        return dims[0] + 1, dims[1] + 1, dims[2] + 1, dims[3] + 1
+
     @property
     def min_row(self):
-        if not self._cell_cache:
-            return None
-        return min(r for r, _ in self._cell_cache)
+        return self._get_dims()[0]
 
     @property
     def max_row(self):
-        if not self._cell_cache:
-            return None
-        return max(r for r, _ in self._cell_cache)
+        return self._get_dims()[2]
 
     @property
     def min_column(self):
-        if not self._cell_cache:
-            return None
-        return min(c for _, c in self._cell_cache)
+        return self._get_dims()[1]
 
     @property
     def max_column(self):
-        if not self._cell_cache:
-            return None
-        return max(c for _, c in self._cell_cache)
+        return self._get_dims()[3]
 
     @property
     def dimensions(self):
-        if not self._cell_cache:
+        mn_r, mn_c, mx_r, mx_c = self._get_dims()
+        if mn_r is None:
             return ""
-        return f"{_col_letter(self.min_column)}{self.min_row}:{_col_letter(self.max_column)}{self.max_row}"
+        return f"{_col_letter(mn_c)}{mn_r}:{_col_letter(mx_c)}{mx_r}"
+
+    # ---- Cell value helpers (Python <-> Rust) ----
+
+    def _get_cell_value(self, row, col):
+        """Read a cell value from Rust. row/col are 1-based."""
+        if self._workbook is None:
+            return None
+        val = self._workbook._rust_wb.get_cell_value(self._sheet_idx, row - 1, col - 1)
+        return val
+
+    def _set_cell_value(self, row, col, value):
+        """Push a cell value to Rust. row/col are 1-based."""
+        if self._workbook is None:
+            return
+        t = type(value)
+        r0 = row - 1
+        c0 = col - 1
+        wb = self._workbook._rust_wb
+        idx = self._sheet_idx
+        if t is str:
+            wb.set_cell_string(idx, r0, c0, value)
+        elif t is float:
+            wb.set_cell_number(idx, r0, c0, value)
+        elif t is int:
+            wb.set_cell_number(idx, r0, c0, float(value))
+        elif t is bool:
+            wb.set_cell_boolean(idx, r0, c0, value)
+        elif t is datetime:
+            serial = _date_to_excel_serial(value.year, value.month, value.day)
+            serial += (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
+            wb.set_cell_datetime(idx, r0, c0, serial, 2)
+            wb.set_cell_number_format(idx, r0, c0, "yyyy-mm-dd hh:mm:ss")
+        elif t is date:
+            serial = _date_to_excel_serial(value.year, value.month, value.day)
+            wb.set_cell_datetime(idx, r0, c0, serial, 0)
+            wb.set_cell_number_format(idx, r0, c0, "yyyy-mm-dd")
+        elif t is time:
+            serial = (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
+            wb.set_cell_datetime(idx, r0, c0, serial, 1)
+            wb.set_cell_number_format(idx, r0, c0, "hh:mm:ss")
+        elif value is None:
+            wb.set_cell_empty(idx, r0, c0)
+        else:
+            raise TypeError(
+                f"Unsupported cell value type: {type(value).__name__}. "
+                f"Supported types: str, int, float, bool, datetime, date, time, None"
+            )
+
+    # ---- Core cell() method ----
+
+    def cell(self, row, column, value=None):
+        key = (row, column)
+        # Return existing proxy if formatted (preserves format attrs)
+        if key in self._formatted_cells:
+            c = self._formatted_cells[key]
+            if value is not None:
+                c.value = value
+            return c
+        # Create new proxy
+        c = Cell(row=row, column=column, value=value, worksheet=self)
+        if self._workbook is None:
+            # No Rust backend — cache cell locally so it persists
+            self._formatted_cells[key] = c
+        elif value is None:
+            # Touch cell in Rust for dimension tracking
+            self._workbook._rust_wb.touch_cell(self._sheet_idx, row - 1, column - 1)
+        return c
+
+    # ---- Iteration ----
 
     def iter_rows(self, min_row=None, max_row=None, min_col=None, max_col=None, values_only=False):
-        min_row = min_row if min_row is not None else self.min_row
-        max_row = max_row if max_row is not None else self.max_row
-        min_col = min_col if min_col is not None else self.min_column
-        max_col = max_col if max_col is not None else self.max_column
+        mn_r, mn_c, mx_r, mx_c = self._get_dims()
+        min_row = min_row if min_row is not None else mn_r
+        max_row = max_row if max_row is not None else mx_r
+        min_col = min_col if min_col is not None else mn_c
+        max_col = max_col if max_col is not None else mx_c
         if any(v is None for v in (min_row, max_row, min_col, max_col)):
             return
-        for row in range(min_row, max_row + 1):
-            if values_only:
-                yield tuple(
-                    self._cell_value((row, col))
-                    for col in range(min_col, max_col + 1)
-                )
-            else:
-                yield tuple(
-                    self.cell(row=row, column=col)
-                    for col in range(min_col, max_col + 1)
-                )
+        if values_only and self._workbook is not None:
+            # Batch read from Rust — single FFI call
+            rows = self._workbook._rust_wb.get_rows_batch(
+                self._sheet_idx, min_row - 1, min_col - 1, max_row - 1, max_col - 1
+            )
+            for row_data in rows:
+                yield tuple(None if v is None else v for v in row_data)
+        else:
+            for row in range(min_row, max_row + 1):
+                if values_only:
+                    yield tuple(
+                        self._get_cell_value(row, col)
+                        for col in range(min_col, max_col + 1)
+                    )
+                else:
+                    yield tuple(
+                        self.cell(row=row, column=col)
+                        for col in range(min_col, max_col + 1)
+                    )
 
     def iter_cols(self, min_col=None, max_col=None, min_row=None, max_row=None, values_only=False):
-        min_row = min_row if min_row is not None else self.min_row
-        max_row = max_row if max_row is not None else self.max_row
-        min_col = min_col if min_col is not None else self.min_column
-        max_col = max_col if max_col is not None else self.max_column
+        mn_r, mn_c, mx_r, mx_c = self._get_dims()
+        min_row = min_row if min_row is not None else mn_r
+        max_row = max_row if max_row is not None else mx_r
+        min_col = min_col if min_col is not None else mn_c
+        max_col = max_col if max_col is not None else mx_c
         if any(v is None for v in (min_row, max_row, min_col, max_col)):
             return
-        for col in range(min_col, max_col + 1):
-            if values_only:
+        if values_only and self._workbook is not None:
+            # Batch read, then transpose to column-major
+            rows = self._workbook._rust_wb.get_rows_batch(
+                self._sheet_idx, min_row - 1, min_col - 1, max_row - 1, max_col - 1
+            )
+            num_cols = max_col - min_col + 1
+            for ci in range(num_cols):
                 yield tuple(
-                    self._cell_value((row, col))
-                    for row in range(min_row, max_row + 1)
+                    None if rows[ri][ci] is None else rows[ri][ci]
+                    for ri in range(len(rows))
                 )
-            else:
-                yield tuple(
-                    self.cell(row=row, column=col)
-                    for row in range(min_row, max_row + 1)
-                )
+        else:
+            for col in range(min_col, max_col + 1):
+                if values_only:
+                    yield tuple(
+                        self._get_cell_value(row, col)
+                        for row in range(min_row, max_row + 1)
+                    )
+                else:
+                    yield tuple(
+                        self.cell(row=row, column=col)
+                        for row in range(min_row, max_row + 1)
+                    )
 
     @property
     def values(self):
         return self.iter_rows(values_only=True)
+
+    # ---- Item access ----
 
     def __setitem__(self, key, value):
         row, col = _parse_cell_ref(key)
@@ -233,203 +326,100 @@ class Worksheet:
         row, col = _parse_cell_ref(key)
         return self.cell(row=row, column=col)
 
-    def _cell_value(self, key):
-        """Return the Python value for a cache entry (Cell or raw value)."""
-        entry = self._cell_cache.get(key)
-        if entry is None:
-            return None
-        if isinstance(entry, Cell):
-            return entry.value
-        return entry
-
-    def cell(self, row, column, value=None):
-        key = (row, column)
-        existing = self._cell_cache.get(key)
-        if existing is None:
-            c = Cell(row, column)
-            self._cell_cache[key] = c
-        elif isinstance(existing, Cell):
-            c = existing
-        else:
-            # Upgrade raw value to Cell object
-            c = Cell(row, column, existing)
-            self._cell_cache[key] = c
-        if row > self._max_row:
-            self._max_row = row
-        if value is not None:
-            c.value = value
-            if self._workbook is not None:
-                t = type(value)
-                r0 = row - 1
-                c0 = column - 1
-                wb = self._workbook._rust_wb
-                idx = self._sheet_idx
-                if t is str:
-                    wb.set_cell_string(idx, r0, c0, value)
-                elif t is float:
-                    wb.set_cell_number(idx, r0, c0, value)
-                elif t is int:
-                    wb.set_cell_number(idx, r0, c0, float(value))
-                elif t is bool:
-                    wb.set_cell_boolean(idx, r0, c0, value)
-                elif t is datetime:
-                    serial = _date_to_excel_serial(value.year, value.month, value.day)
-                    serial += (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
-                    wb.set_cell_datetime(idx, r0, c0, serial)
-                    if c.number_format == "General":
-                        c.number_format = "yyyy-mm-dd hh:mm:ss"
-                elif t is date:
-                    serial = _date_to_excel_serial(value.year, value.month, value.day)
-                    wb.set_cell_datetime(idx, r0, c0, serial)
-                    if c.number_format == "General":
-                        c.number_format = "yyyy-mm-dd"
-                elif t is time:
-                    serial = (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
-                    wb.set_cell_datetime(idx, r0, c0, serial)
-                    if c.number_format == "General":
-                        c.number_format = "hh:mm:ss"
-                else:
-                    raise TypeError(
-                        f"Unsupported cell value type: {type(value).__name__}. "
-                        f"Supported types: str, int, float, bool, datetime, date, time, None"
-                    )
-        return c
-
-    def _set_rust_value(self, row, col, value):
-        """Push a single cell value to Rust. Used by _resync_rust."""
-        if self._workbook is None:
-            return
-        wb = self._workbook._rust_wb
-        idx = self._sheet_idx
-        t = type(value)
-        if t is str:
-            wb.set_cell_string(idx, row, col, value)
-        elif t is float:
-            wb.set_cell_number(idx, row, col, value)
-        elif t is int:
-            wb.set_cell_number(idx, row, col, float(value))
-        elif t is bool:
-            wb.set_cell_boolean(idx, row, col, value)
-        elif t is datetime:
-            serial = _date_to_excel_serial(value.year, value.month, value.day)
-            serial += (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
-            wb.set_cell_datetime(idx, row, col, serial)
-        elif t is date:
-            serial = _date_to_excel_serial(value.year, value.month, value.day)
-            wb.set_cell_datetime(idx, row, col, serial)
-        elif t is time:
-            serial = (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
-            wb.set_cell_datetime(idx, row, col, serial)
+    # ---- Append ----
 
     def _next_row(self):
-        return max(self._current_row, self._max_row) + 1
+        if self._workbook is None:
+            return 1
+        return self._workbook._rust_wb.get_next_append_row(self._sheet_idx) + 1  # 0->1-based
 
     def append(self, iterable):
         row = self._next_row()
         values = list(iterable)
 
         if self._workbook is not None and self._sheet_idx is not None:
-            # Build converted row for single batch FFI call
             converted = []
-            datetime_formats = []
+            datetime_cells = []  # (col_idx, fmt_str, kind, serial)
             for col_idx, value in enumerate(values):
-                t = type(value)
                 if value is None:
                     converted.append(None)
-                elif t is datetime:
-                    serial = _date_to_excel_serial(value.year, value.month, value.day)
-                    serial += (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
-                    converted.append(serial)
-                    datetime_formats.append((col_idx, "yyyy-mm-dd hh:mm:ss"))
-                elif t is date:
-                    serial = _date_to_excel_serial(value.year, value.month, value.day)
-                    converted.append(serial)
-                    datetime_formats.append((col_idx, "yyyy-mm-dd"))
-                elif t is time:
-                    serial = (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
-                    converted.append(serial)
-                    datetime_formats.append((col_idx, "hh:mm:ss"))
-                elif t is int:
-                    converted.append(float(value))
                 else:
-                    converted.append(value)
+                    t = type(value)
+                    if t is datetime:
+                        serial = _date_to_excel_serial(value.year, value.month, value.day)
+                        serial += (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
+                        converted.append(serial)
+                        datetime_cells.append((col_idx, "yyyy-mm-dd hh:mm:ss", 2, serial))
+                    elif t is date:
+                        serial = _date_to_excel_serial(value.year, value.month, value.day)
+                        converted.append(serial)
+                        datetime_cells.append((col_idx, "yyyy-mm-dd", 0, serial))
+                    elif t is time:
+                        serial = (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
+                        converted.append(serial)
+                        datetime_cells.append((col_idx, "hh:mm:ss", 1, serial))
+                    elif t is int:
+                        converted.append(float(value))
+                    else:
+                        converted.append(value)
 
             r0 = row - 1
-            self._workbook._rust_wb.set_rows_batch(
-                self._sheet_idx, r0, [converted]
-            )
+            self._workbook._rust_wb.set_rows_batch(self._sheet_idx, r0, [converted])
             wb = self._workbook._rust_wb
-            for col_idx, fmt_str in datetime_formats:
+            for col_idx, fmt_str, kind, serial in datetime_cells:
+                wb.set_cell_datetime(self._sheet_idx, r0, col_idx, serial, kind)
                 wb.set_cell_number_format(self._sheet_idx, r0, col_idx, fmt_str)
-
-        # Store Cell objects (append is interactive path, user may access cells)
-        for col_idx, value in enumerate(values, start=1):
-            c = Cell(row, col_idx, value)
-            # Set datetime number_format
-            if isinstance(value, datetime):
-                c.number_format = "yyyy-mm-dd hh:mm:ss"
-            elif isinstance(value, date):
-                c.number_format = "yyyy-mm-dd"
-            elif isinstance(value, time):
-                c.number_format = "hh:mm:ss"
-            self._cell_cache[(row, col_idx)] = c
-
-        self._current_row = row
-        if row > self._max_row:
-            self._max_row = row
+            wb.set_next_append_row(self._sheet_idx, r0 + 1)
 
     def append_rows(self, rows_data):
-        """Append multiple rows at once via the Rust batch API for maximum speed.
-
-        Stores raw values in _cell_cache (not Cell objects) to avoid creating
-        millions of Cell instances that are never accessed.
-        """
-        # Materialize generator to list for safe double-iteration
+        """Append multiple rows at once via the Rust batch API."""
         rows_data = list(rows_data)
+        if not rows_data:
+            return
         start_row = self._next_row()
         start_row_0based = start_row - 1
 
-        datetime_cells = []
+        datetime_cells = []  # (r0, c0, fmt_str, kind, serial)
 
         if self._workbook is not None and self._sheet_idx is not None:
             rows_list = []
             for row_offset, row in enumerate(rows_data):
                 converted_row = []
                 for col_offset, value in enumerate(row):
-                    t = type(value)
-                    if t is datetime:
-                        serial = _date_to_excel_serial(value.year, value.month, value.day)
-                        serial += (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
-                        converted_row.append(serial)
-                        datetime_cells.append((start_row_0based + row_offset, col_offset, "yyyy-mm-dd hh:mm:ss"))
-                    elif t is date:
-                        serial = _date_to_excel_serial(value.year, value.month, value.day)
-                        converted_row.append(serial)
-                        datetime_cells.append((start_row_0based + row_offset, col_offset, "yyyy-mm-dd"))
-                    elif t is time:
-                        serial = (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
-                        converted_row.append(serial)
-                        datetime_cells.append((start_row_0based + row_offset, col_offset, "hh:mm:ss"))
+                    if value is None:
+                        converted_row.append(None)
                     else:
-                        converted_row.append(value)
+                        t = type(value)
+                        if t is datetime:
+                            serial = _date_to_excel_serial(value.year, value.month, value.day)
+                            serial += (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
+                            converted_row.append(serial)
+                            datetime_cells.append((start_row_0based + row_offset, col_offset, "yyyy-mm-dd hh:mm:ss", 2, serial))
+                        elif t is date:
+                            serial = _date_to_excel_serial(value.year, value.month, value.day)
+                            converted_row.append(serial)
+                            datetime_cells.append((start_row_0based + row_offset, col_offset, "yyyy-mm-dd", 0, serial))
+                        elif t is time:
+                            serial = (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
+                            converted_row.append(serial)
+                            datetime_cells.append((start_row_0based + row_offset, col_offset, "hh:mm:ss", 1, serial))
+                        elif t is int:
+                            converted_row.append(float(value))
+                        else:
+                            converted_row.append(value)
                 rows_list.append(converted_row)
             self._workbook._rust_wb.set_rows_batch(
                 self._sheet_idx, start_row_0based, rows_list
             )
-
             wb = self._workbook._rust_wb
-            for r0, c0, fmt_str in datetime_cells:
+            for r0, c0, fmt_str, kind, serial in datetime_cells:
+                wb.set_cell_datetime(self._sheet_idx, r0, c0, serial, kind)
                 wb.set_cell_number_format(self._sheet_idx, r0, c0, fmt_str)
+            # Update append cursor
+            last_row_0based = start_row_0based + len(rows_data)
+            wb.set_next_append_row(self._sheet_idx, last_row_0based)
 
-        # Store raw values (not Cell objects) — avoids 1M Cell creations
-        for row_offset, row_values in enumerate(rows_data):
-            row = start_row + row_offset
-            for col_idx, value in enumerate(row_values, start=1):
-                if value is not None:
-                    self._cell_cache[(row, col_idx)] = value
-            self._current_row = row
-        if self._current_row > self._max_row:
-            self._max_row = self._current_row
+    # ---- Merge cells ----
 
     def merge_cells(self, range_string):
         parts = range_string.split(":")
@@ -453,45 +443,31 @@ class Worksheet:
         end_ref = parts[1].upper()
         target = (start_ref, end_ref)
         if target not in self.merged_cell_ranges:
-            raise ValueError(
-                f"Cell range {range_string} is not merged"
-            )
+            raise ValueError(f"Cell range {range_string} is not merged")
         self.merged_cell_ranges.remove(target)
-        self._resync_rust()
+        if self._workbook is not None and self._sheet_idx is not None:
+            wb = self._workbook._rust_wb
+            wb.clear_merge_ranges(self._sheet_idx)
+            for (s, e) in self.merged_cell_ranges:
+                r1, c1 = _parse_cell_ref(s)
+                r2, c2 = _parse_cell_ref(e)
+                wb.add_merge_range(self._sheet_idx, r1 - 1, c1 - 1, r2 - 1, c2 - 1)
 
-    def _resync_rust(self):
-        """Clear and re-push all cell data to Rust after structural changes."""
-        if self._workbook is None or self._sheet_idx is None:
-            return
-        wb = self._workbook._rust_wb
-        idx = self._sheet_idx
-        wb.clear_cells(idx)
-        wb.clear_merge_ranges(idx)
-
-        for (row, col), entry in self._cell_cache.items():
-            value = entry.value if isinstance(entry, Cell) else entry
-            if value is not None:
-                self._set_rust_value(row - 1, col - 1, value)
-
-        # Re-push formats
-        self._flush_formats_to_rust()
-
-        for (start_ref, end_ref) in self.merged_cell_ranges:
-            r1, c1 = _parse_cell_ref(start_ref)
-            r2, c2 = _parse_cell_ref(end_ref)
-            wb.add_merge_range(idx, r1 - 1, c1 - 1, r2 - 1, c2 - 1)
+    # ---- Row/Col insert/delete ----
 
     def insert_rows(self, idx, amount=1):
-        new_cells = {}
-        for (row, col), entry in self._cell_cache.items():
-            if row >= idx:
-                new_row = row + amount
-                if isinstance(entry, Cell):
-                    entry.row = new_row
-                new_cells[(new_row, col)] = entry
+        if self._workbook is not None:
+            self._workbook._rust_wb.rust_insert_rows(self._sheet_idx, idx - 1, amount)
+        # Shift formatted cells
+        new_fc = {}
+        for (r, c), cell in self._formatted_cells.items():
+            if r >= idx:
+                cell._row = r + amount
+                new_fc[(r + amount, c)] = cell
             else:
-                new_cells[(row, col)] = entry
-        self._cell_cache = new_cells
+                new_fc[(r, c)] = cell
+        self._formatted_cells = new_fc
+        # Shift merged_cell_ranges (Python-side list for API compat)
         new_merged = []
         for (start_ref, end_ref) in self.merged_cell_ranges:
             r1, c1 = _parse_cell_ref(start_ref)
@@ -502,24 +478,20 @@ class Worksheet:
                 r2 += amount
             new_merged.append((_col_letter(c1) + str(r1), _col_letter(c2) + str(r2)))
         self.merged_cell_ranges = new_merged
-        if self._current_row >= idx:
-            self._current_row += amount
-        self._max_row = max((r for r, _ in self._cell_cache), default=0)
-        self._resync_rust()
 
     def delete_rows(self, idx, amount=1):
-        new_cells = {}
-        for (row, col), entry in self._cell_cache.items():
-            if idx <= row < idx + amount:
+        if self._workbook is not None:
+            self._workbook._rust_wb.rust_delete_rows(self._sheet_idx, idx - 1, amount)
+        new_fc = {}
+        for (r, c), cell in self._formatted_cells.items():
+            if idx <= r < idx + amount:
                 continue
-            elif row >= idx + amount:
-                new_row = row - amount
-                if isinstance(entry, Cell):
-                    entry.row = new_row
-                new_cells[(new_row, col)] = entry
+            elif r >= idx + amount:
+                cell._row = r - amount
+                new_fc[(r - amount, c)] = cell
             else:
-                new_cells[(row, col)] = entry
-        self._cell_cache = new_cells
+                new_fc[(r, c)] = cell
+        self._formatted_cells = new_fc
         new_merged = []
         for (start_ref, end_ref) in self.merged_cell_ranges:
             r1, c1 = _parse_cell_ref(start_ref)
@@ -532,24 +504,18 @@ class Worksheet:
                 r2 -= amount
             new_merged.append((_col_letter(c1) + str(r1), _col_letter(c2) + str(r2)))
         self.merged_cell_ranges = new_merged
-        if self._current_row >= idx + amount:
-            self._current_row -= amount
-        elif self._current_row >= idx:
-            self._current_row = max(idx - 1, 0)
-        self._max_row = max((r for r, _ in self._cell_cache), default=0)
-        self._resync_rust()
 
     def insert_cols(self, idx, amount=1):
-        new_cells = {}
-        for (row, col), entry in self._cell_cache.items():
-            if col >= idx:
-                new_col = col + amount
-                if isinstance(entry, Cell):
-                    entry.column = new_col
-                new_cells[(row, new_col)] = entry
+        if self._workbook is not None:
+            self._workbook._rust_wb.rust_insert_cols(self._sheet_idx, idx - 1, amount)
+        new_fc = {}
+        for (r, c), cell in self._formatted_cells.items():
+            if c >= idx:
+                cell._col = c + amount
+                new_fc[(r, c + amount)] = cell
             else:
-                new_cells[(row, col)] = entry
-        self._cell_cache = new_cells
+                new_fc[(r, c)] = cell
+        self._formatted_cells = new_fc
         new_merged = []
         for (start_ref, end_ref) in self.merged_cell_ranges:
             r1, c1 = _parse_cell_ref(start_ref)
@@ -560,21 +526,20 @@ class Worksheet:
                 c2 += amount
             new_merged.append((_col_letter(c1) + str(r1), _col_letter(c2) + str(r2)))
         self.merged_cell_ranges = new_merged
-        self._resync_rust()
 
     def delete_cols(self, idx, amount=1):
-        new_cells = {}
-        for (row, col), entry in self._cell_cache.items():
-            if idx <= col < idx + amount:
+        if self._workbook is not None:
+            self._workbook._rust_wb.rust_delete_cols(self._sheet_idx, idx - 1, amount)
+        new_fc = {}
+        for (r, c), cell in self._formatted_cells.items():
+            if idx <= c < idx + amount:
                 continue
-            elif col >= idx + amount:
-                new_col = col - amount
-                if isinstance(entry, Cell):
-                    entry.column = new_col
-                new_cells[(row, new_col)] = entry
+            elif c >= idx + amount:
+                cell._col = c - amount
+                new_fc[(r, c - amount)] = cell
             else:
-                new_cells[(row, col)] = entry
-        self._cell_cache = new_cells
+                new_fc[(r, c)] = cell
+        self._formatted_cells = new_fc
         new_merged = []
         for (start_ref, end_ref) in self.merged_cell_ranges:
             r1, c1 = _parse_cell_ref(start_ref)
@@ -587,7 +552,8 @@ class Worksheet:
                 c2 -= amount
             new_merged.append((_col_letter(c1) + str(r1), _col_letter(c2) + str(r2)))
         self.merged_cell_ranges = new_merged
-        self._resync_rust()
+
+    # ---- Images / Validation ----
 
     def add_image(self, img, anchor=None):
         if anchor is not None:
@@ -597,26 +563,21 @@ class Worksheet:
     def add_data_validation(self, dv):
         self._data_validations.append(dv)
 
+    # ---- Flush formats to Rust at save time ----
+
     def _flush_formats_to_rust(self):
-        """Push cell formats to Rust using CellFormat struct (no JSON).
-
-        Called at save time. Only processes cells that have non-default formats.
-        """
+        """Push cell formats to Rust. Only iterates _formatted_cells (tiny set)."""
         if self._workbook is None or self._sheet_idx is None:
             return
         wb = self._workbook._rust_wb
         idx = self._sheet_idx
 
-        for (row, col), cell in self._cell_cache.items():
-            if not isinstance(cell, Cell):
-                continue  # raw value, no format to push
+        for (row, col), cell in self._formatted_cells.items():
             r0, c0 = row - 1, col - 1
 
-            # Number format
             if cell.number_format and cell.number_format != "General":
                 wb.set_cell_number_format(idx, r0, c0, cell.number_format)
 
-            # Font
             if cell.font is not None:
                 f = cell.font
                 wb.set_cell_font(
@@ -629,7 +590,6 @@ class Worksheet:
                     _vert_align_to_u8(f.vertAlign),
                 )
 
-            # Alignment
             if cell.alignment is not None:
                 a = cell.alignment
                 wb.set_cell_alignment(
@@ -642,7 +602,6 @@ class Worksheet:
                     int(a.text_rotation) if a.text_rotation else 0,
                 )
 
-            # Fill
             if cell.fill is not None:
                 fi = cell.fill
                 wb.set_cell_fill(
@@ -652,7 +611,6 @@ class Worksheet:
                     fi.end_color,
                 )
 
-            # Border
             if cell.border is not None:
                 b = cell.border
                 wb.set_cell_border(
@@ -671,81 +629,6 @@ class Worksheet:
                     bool(b.diagonalDown),
                 )
 
-    def _flush_metadata(self):
-        """Push column widths, row heights, freeze panes, hyperlinks, comments,
-        and other sheet-level metadata to Rust. Called right before save.
-        """
-        if self._workbook is None or self._sheet_idx is None:
-            return
-        wb = self._workbook._rust_wb
-        idx = self._sheet_idx
-
-        # Single pass: formats + hyperlinks + comments (skip raw values)
-        for (row, col), cell in self._cell_cache.items():
-            if not isinstance(cell, Cell):
-                continue
-            r0, c0 = row - 1, col - 1
-
-            # Number format
-            if cell.number_format and cell.number_format != "General":
-                wb.set_cell_number_format(idx, r0, c0, cell.number_format)
-
-            # Font
-            if cell.font is not None:
-                f = cell.font
-                wb.set_cell_font(
-                    idx, r0, c0,
-                    f.bold, f.italic, f.name,
-                    float(f.size) if f.size is not None else None,
-                    f.color,
-                    _underline_to_u8(f.underline),
-                    f.strikethrough,
-                    _vert_align_to_u8(f.vertAlign),
-                )
-
-            # Alignment
-            if cell.alignment is not None:
-                a = cell.alignment
-                wb.set_cell_alignment(
-                    idx, r0, c0,
-                    _HALIGN_MAP.get(a.horizontal) if a.horizontal else None,
-                    _VALIGN_MAP.get(a.vertical) if a.vertical else None,
-                    bool(a.wrap_text),
-                    bool(a.shrink_to_fit),
-                    int(a.indent) if a.indent else 0,
-                    int(a.text_rotation) if a.text_rotation else 0,
-                )
-
-            # Fill
-            if cell.fill is not None:
-                fi = cell.fill
-                wb.set_cell_fill(
-                    idx, r0, c0,
-                    _FILL_TYPE_MAP.get(fi.fill_type) if fi.fill_type else None,
-                    fi.start_color,
-                    fi.end_color,
-                )
-
-            # Border
-            if cell.border is not None:
-                b = cell.border
-                wb.set_cell_border(
-                    idx, r0, c0,
-                    _BORDER_STYLE_MAP.get(b.left.style) if b.left.style else None,
-                    b.left.color,
-                    _BORDER_STYLE_MAP.get(b.right.style) if b.right.style else None,
-                    b.right.color,
-                    _BORDER_STYLE_MAP.get(b.top.style) if b.top.style else None,
-                    b.top.color,
-                    _BORDER_STYLE_MAP.get(b.bottom.style) if b.bottom.style else None,
-                    b.bottom.color,
-                    _BORDER_STYLE_MAP.get(b.diagonal.style) if b.diagonal.style else None,
-                    b.diagonal.color,
-                    bool(b.diagonalUp),
-                    bool(b.diagonalDown),
-                )
-
-            # Hyperlink
             if cell.hyperlink is not None:
                 url = cell.hyperlink
                 text = None
@@ -754,10 +637,19 @@ class Worksheet:
                     url = "internal:" + url[1:]
                 wb.add_hyperlink(idx, r0, c0, url, text, tooltip)
 
-            # Comment/Note
             if cell.comment is not None:
                 author = cell.comment.author if cell.comment.author else None
                 wb.add_note(idx, r0, c0, cell.comment.text, author)
+
+    def _flush_metadata(self):
+        """Push all metadata to Rust. Called right before save."""
+        if self._workbook is None or self._sheet_idx is None:
+            return
+        wb = self._workbook._rust_wb
+        idx = self._sheet_idx
+
+        # Formats + hyperlinks + comments (only formatted cells)
+        self._flush_formats_to_rust()
 
         # Column widths
         for letter, dim in self.column_dimensions.items():
@@ -892,6 +784,8 @@ class Worksheet:
             if img.anchor:
                 r, c = _parse_cell_ref(img.anchor)
                 wb.add_image(idx, r - 1, c - 1, img._data, None, None)
+
+    # ---- Conditional formatting serialization (same as before) ----
 
     def _serialize_rule_format(self, rule):
         fmt = {}

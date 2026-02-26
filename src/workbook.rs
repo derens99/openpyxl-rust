@@ -2,6 +2,56 @@ use pyo3::prelude::*;
 use pyo3::types::PyList;
 use crate::types::*;
 
+/// Convert Excel serial number to (year, month, day) using inverse Julian Day algorithm.
+fn serial_to_date_parts(serial: f64) -> (i32, u32, u32) {
+    let mut s = serial.floor() as i64;
+    if s > 59 { s -= 1; } // Undo Lotus 1-2-3 bug
+    let j = s + 2_415_020; // Convert to Julian Day Number
+    let a = j + 32_044;
+    let b = (4 * a + 3) / 146_097;
+    let c = a - (146_097 * b) / 4;
+    let d = (4 * c + 3) / 1_461;
+    let e = c - (1_461 * d) / 4;
+    let m = (5 * e + 2) / 153;
+    let day = e - (153 * m + 2) / 5 + 1;
+    let month = m + 3 - 12 * (m / 10);
+    let year = 100 * b + d - 4800 + m / 10;
+    (year as i32, month as u32, day as u32)
+}
+
+/// Convert fractional day to (hours, minutes, seconds, microseconds).
+fn serial_to_time_parts(serial: f64) -> (u32, u32, u32, u32) {
+    let frac = serial.fract().abs();
+    let total_us = (frac * 86_400_000_000.0).round() as u64;
+    let hours = (total_us / 3_600_000_000) as u32;
+    let rem = total_us % 3_600_000_000;
+    let minutes = (rem / 60_000_000) as u32;
+    let rem2 = rem % 60_000_000;
+    let seconds = (rem2 / 1_000_000) as u32;
+    let microseconds = (rem2 % 1_000_000) as u32;
+    (hours, minutes, seconds, microseconds)
+}
+
+/// Convert a DateTime serial + kind to a Python datetime/date/time object.
+fn datetime_to_py(py: Python<'_>, serial: f64, kind: u8) -> PyResult<PyObject> {
+    let dt_mod = py.import("datetime")?;
+    match kind {
+        0 => { // date
+            let (y, m, d) = serial_to_date_parts(serial);
+            Ok(dt_mod.getattr("date")?.call1((y, m, d))?.unbind())
+        }
+        1 => { // time
+            let (h, min, s, us) = serial_to_time_parts(serial);
+            Ok(dt_mod.getattr("time")?.call1((h, min, s, us))?.unbind())
+        }
+        _ => { // datetime
+            let (y, m, d) = serial_to_date_parts(serial);
+            let (h, min, s, us) = serial_to_time_parts(serial);
+            Ok(dt_mod.getattr("datetime")?.call1((y, m, d, h, min, s, us))?.unbind())
+        }
+    }
+}
+
 #[pyclass]
 pub(crate) struct RustWorkbook {
     pub(crate) sheets: Vec<SheetData>,
@@ -65,6 +115,7 @@ impl RustWorkbook {
         } else {
             sd.cells.insert(key, CellValue { value: cell_data, format: CellFormat::default() });
         }
+        sd.track_cell(row, col);
         Ok(())
     }
 
@@ -77,6 +128,7 @@ impl RustWorkbook {
         } else {
             sd.cells.insert(key, CellValue { value: CellData::Number(value), format: CellFormat::default() });
         }
+        sd.track_cell(row, col);
         Ok(())
     }
 
@@ -89,18 +141,20 @@ impl RustWorkbook {
         } else {
             sd.cells.insert(key, CellValue { value: CellData::Boolean(value), format: CellFormat::default() });
         }
+        sd.track_cell(row, col);
         Ok(())
     }
 
-    fn set_cell_datetime(&mut self, sheet: usize, row: u32, col: u16, serial: f64) -> PyResult<()> {
+    fn set_cell_datetime(&mut self, sheet: usize, row: u32, col: u16, serial: f64, kind: u8) -> PyResult<()> {
         let sd = self.sheets.get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
         let key = (row, col);
         if let Some(cv) = sd.cells.get_mut(&key) {
-            cv.value = CellData::DateTime(serial);
+            cv.value = CellData::DateTime(serial, kind);
         } else {
-            sd.cells.insert(key, CellValue { value: CellData::DateTime(serial), format: CellFormat::default() });
+            sd.cells.insert(key, CellValue { value: CellData::DateTime(serial, kind), format: CellFormat::default() });
         }
+        sd.track_cell(row, col);
         Ok(())
     }
 
@@ -113,6 +167,7 @@ impl RustWorkbook {
         } else {
             sd.cells.insert(key, CellValue { value: CellData::Empty, format: CellFormat::default() });
         }
+        sd.track_cell(row, col);
         Ok(())
     }
 
@@ -130,7 +185,7 @@ impl RustWorkbook {
                     Ok(owned.into_any().unbind())
                 },
                 CellData::Formula(f) => Ok(f.as_str().into_pyobject(py).unwrap().into_any().unbind()),
-                CellData::DateTime(serial) => Ok((*serial).into_pyobject(py).unwrap().into_any().unbind()),
+                CellData::DateTime(serial, kind) => datetime_to_py(py, *serial, *kind),
                 CellData::Empty => Ok(py.None()),
             },
             None => Ok(py.None()),
@@ -275,6 +330,7 @@ impl RustWorkbook {
                 } else {
                     sd.cells.insert(key, CellValue { value: cell_data, format: CellFormat::default() });
                 }
+                sd.track_cell(row, col);
             }
         }
         Ok(())
@@ -301,6 +357,7 @@ impl RustWorkbook {
         };
         let cv = sd.cells.entry(key).or_insert_with(|| CellValue { value: CellData::Empty, format: CellFormat::default() });
         cv.value = cell_data;
+        sd.track_cell(row, col);
         Ok(())
     }
 
@@ -330,6 +387,7 @@ impl RustWorkbook {
         cv.format.font_underline = underline;
         cv.format.font_strikethrough = strikethrough;
         cv.format.font_vert_align = vert_align;
+        sd.track_cell(row, col);
         Ok(())
     }
 
@@ -355,6 +413,7 @@ impl RustWorkbook {
         cv.format.align_shrink_to_fit = shrink_to_fit;
         cv.format.align_indent = indent;
         cv.format.align_text_rotation = text_rotation;
+        sd.track_cell(row, col);
         Ok(())
     }
 
@@ -374,6 +433,7 @@ impl RustWorkbook {
         cv.format.fill_type = fill_type;
         cv.format.fill_start_color = start_color;
         cv.format.fill_end_color = end_color;
+        sd.track_cell(row, col);
         Ok(())
     }
 
@@ -411,6 +471,7 @@ impl RustWorkbook {
         cv.format.border_diagonal_color = diag_color;
         cv.format.border_diagonal_up = diag_up;
         cv.format.border_diagonal_down = diag_down;
+        sd.track_cell(row, col);
         Ok(())
     }
 
@@ -426,10 +487,178 @@ impl RustWorkbook {
         let key = (row, col);
         let cv = sd.cells.entry(key).or_insert_with(|| CellValue { value: CellData::Empty, format: CellFormat::default() });
         cv.format.number_format = Some(format);
+        sd.track_cell(row, col);
         Ok(())
     }
 
 
+
+    fn get_dimensions(&self, sheet: usize) -> PyResult<(Option<u32>, Option<u16>, Option<u32>, Option<u16>)> {
+        let sd = self.sheets.get(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        Ok((sd.min_row, sd.min_col, sd.max_row, sd.max_col))
+    }
+
+    fn touch_cell(&mut self, sheet: usize, row: u32, col: u16) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.track_cell(row, col);
+        let key = (row, col);
+        sd.cells.entry(key).or_insert_with(|| CellValue { value: CellData::Empty, format: CellFormat::default() });
+        Ok(())
+    }
+
+    fn get_next_append_row(&self, sheet: usize) -> PyResult<u32> {
+        let sd = self.sheets.get(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        let max = sd.max_row.map(|r| r + 1).unwrap_or(0);
+        Ok(std::cmp::max(sd.append_row, max))
+    }
+
+    fn set_next_append_row(&mut self, sheet: usize, row: u32) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.append_row = row;
+        Ok(())
+    }
+
+    fn get_rows_batch(&self, py: Python<'_>, sheet: usize, min_row: u32, min_col: u16, max_row: u32, max_col: u16) -> PyResult<PyObject> {
+        let sd = self.sheets.get(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        let result = pyo3::types::PyList::empty(py);
+        for r in min_row..=max_row {
+            let row_list = pyo3::types::PyList::empty(py);
+            for c in min_col..=max_col {
+                let val = match sd.cells.get(&(r, c)) {
+                    Some(cv) => match &cv.value {
+                        CellData::String(s) => s.as_str().into_pyobject(py).unwrap().into_any().unbind(),
+                        CellData::Number(n) => (*n).into_pyobject(py).unwrap().into_any().unbind(),
+                        CellData::Boolean(b) => (*b).into_pyobject(py).unwrap().to_owned().into_any().unbind(),
+                        CellData::Formula(f) => f.as_str().into_pyobject(py).unwrap().into_any().unbind(),
+                        CellData::DateTime(s, k) => datetime_to_py(py, *s, *k)?,
+                        CellData::Empty => py.None(),
+                    },
+                    None => py.None(),
+                };
+                row_list.append(val)?;
+            }
+            result.append(row_list)?;
+        }
+        Ok(result.into())
+    }
+
+    fn rust_insert_rows(&mut self, sheet: usize, idx: u32, amount: u32) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        let keys: Vec<(u32, u16)> = sd.cells.keys().cloned().collect();
+        let mut new_cells = std::collections::HashMap::new();
+        for key in keys {
+            let (r, c) = key;
+            let cv = sd.cells.remove(&key).unwrap();
+            if r >= idx {
+                new_cells.insert((r + amount, c), cv);
+            } else {
+                new_cells.insert((r, c), cv);
+            }
+        }
+        sd.cells = new_cells;
+        for range in &mut sd.merged_ranges {
+            if range.0 >= idx { range.0 += amount; }
+            if range.2 >= idx { range.2 += amount; }
+        }
+        for h in &mut sd.hyperlinks {
+            if h.0 >= idx { h.0 += amount; }
+        }
+        for n in &mut sd.notes {
+            if n.0 >= idx { n.0 += amount; }
+        }
+        if sd.append_row >= idx { sd.append_row += amount; }
+        sd.recompute_dimensions();
+        Ok(())
+    }
+
+    fn rust_delete_rows(&mut self, sheet: usize, idx: u32, amount: u32) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        let keys: Vec<(u32, u16)> = sd.cells.keys().cloned().collect();
+        let mut new_cells = std::collections::HashMap::new();
+        for key in keys {
+            let (r, c) = key;
+            let cv = sd.cells.remove(&key).unwrap();
+            if r >= idx && r < idx + amount {
+                // deleted
+            } else if r >= idx + amount {
+                new_cells.insert((r - amount, c), cv);
+            } else {
+                new_cells.insert((r, c), cv);
+            }
+        }
+        sd.cells = new_cells;
+        sd.merged_ranges.retain(|range| !(range.0 >= idx && range.2 < idx + amount));
+        for range in &mut sd.merged_ranges {
+            if range.0 >= idx + amount { range.0 -= amount; }
+            if range.2 >= idx + amount { range.2 -= amount; }
+        }
+        sd.hyperlinks.retain(|h| !(h.0 >= idx && h.0 < idx + amount));
+        for h in &mut sd.hyperlinks { if h.0 >= idx + amount { h.0 -= amount; } }
+        sd.notes.retain(|n| !(n.0 >= idx && n.0 < idx + amount));
+        for n in &mut sd.notes { if n.0 >= idx + amount { n.0 -= amount; } }
+        if sd.append_row >= idx + amount {
+            sd.append_row -= amount;
+        } else if sd.append_row >= idx {
+            sd.append_row = idx;
+        }
+        sd.recompute_dimensions();
+        Ok(())
+    }
+
+    fn rust_insert_cols(&mut self, sheet: usize, idx: u16, amount: u16) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        let keys: Vec<(u32, u16)> = sd.cells.keys().cloned().collect();
+        let mut new_cells = std::collections::HashMap::new();
+        for key in keys {
+            let (r, c) = key;
+            let cv = sd.cells.remove(&key).unwrap();
+            if c >= idx { new_cells.insert((r, c + amount), cv); }
+            else { new_cells.insert((r, c), cv); }
+        }
+        sd.cells = new_cells;
+        for range in &mut sd.merged_ranges {
+            if range.1 >= idx { range.1 += amount; }
+            if range.3 >= idx { range.3 += amount; }
+        }
+        for h in &mut sd.hyperlinks { if h.1 >= idx { h.1 += amount; } }
+        for n in &mut sd.notes { if n.1 >= idx { n.1 += amount; } }
+        sd.recompute_dimensions();
+        Ok(())
+    }
+
+    fn rust_delete_cols(&mut self, sheet: usize, idx: u16, amount: u16) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        let keys: Vec<(u32, u16)> = sd.cells.keys().cloned().collect();
+        let mut new_cells = std::collections::HashMap::new();
+        for key in keys {
+            let (r, c) = key;
+            let cv = sd.cells.remove(&key).unwrap();
+            if c >= idx && c < idx + amount { /* deleted */ }
+            else if c >= idx + amount { new_cells.insert((r, c - amount), cv); }
+            else { new_cells.insert((r, c), cv); }
+        }
+        sd.cells = new_cells;
+        sd.merged_ranges.retain(|range| !(range.1 >= idx && range.3 < idx + amount));
+        for range in &mut sd.merged_ranges {
+            if range.1 >= idx + amount { range.1 -= amount; }
+            if range.3 >= idx + amount { range.3 -= amount; }
+        }
+        sd.hyperlinks.retain(|h| !(h.1 >= idx && h.1 < idx + amount));
+        for h in &mut sd.hyperlinks { if h.1 >= idx + amount { h.1 -= amount; } }
+        sd.notes.retain(|n| !(n.1 >= idx && n.1 < idx + amount));
+        for n in &mut sd.notes { if n.1 >= idx + amount { n.1 -= amount; } }
+        sd.recompute_dimensions();
+        Ok(())
+    }
 
     fn save(&self, py: Python<'_>, path: Option<&str>) -> PyResult<PyObject> {
         crate::save::save_workbook(&self.sheets, &self.defined_names, path, py)

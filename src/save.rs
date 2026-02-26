@@ -51,7 +51,7 @@ pub(crate) fn save_workbook(
                             worksheet.write_formula(row, col, formula).map_err(xlsx_err)?;
                         }
                     }
-                    CellData::DateTime(serial) => {
+                    CellData::DateTime(serial, _kind) => {
                         if has_format {
                             worksheet.write_number_with_format(row, col, *serial, &fmt).map_err(xlsx_err)?;
                         } else {
