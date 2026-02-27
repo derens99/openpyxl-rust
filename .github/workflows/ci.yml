@@ -12,27 +12,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install ruff
-        run: pip install ruff
+      - uses: astral-sh/setup-uv@v5
 
       - name: Ruff format check
-        run: ruff format --check python/ tests/ benchmarks/
+        run: uvx ruff format --check python/ tests/
 
       - name: Ruff lint check
-        run: ruff check python/ tests/ benchmarks/
+        run: uvx ruff check python/ tests/
 
   clippy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Create venv for PyO3
+        run: uv venv --python 3.12
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -44,4 +40,6 @@ jobs:
         run: cargo fmt --check
 
       - name: Cargo clippy
-        run: cargo clippy -- -D warnings
+        run: |
+          source .venv/bin/activate
+          cargo clippy -- -D warnings
