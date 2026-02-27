@@ -1,7 +1,6 @@
 # openpyxl_rust
 
-[![Test](https://github.com/derens99/openpyxl-rust/actions/workflows/test.yml/badge.svg)](https://github.com/derens99/openpyxl-rust/actions/workflows/test.yml)
-[![Lint](https://github.com/derens99/openpyxl-rust/actions/workflows/lint.yml/badge.svg)](https://github.com/derens99/openpyxl-rust/actions/workflows/lint.yml)
+[![CI](https://github.com/derens99/openpyxl-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/derens99/openpyxl-rust/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Fast, Rust-backed Excel (.xlsx) writer with an openpyxl-compatible Python API. Typically **2-3x faster** than openpyxl for write operations.
