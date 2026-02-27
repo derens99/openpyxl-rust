@@ -110,6 +110,8 @@ class Worksheet:
         self._images = []
         self._data_validations = []
         self.conditional_formatting = _ConditionalFormattingList()
+        self._tables = []
+        self._charts = []
 
         if workbook is not None and sheet_idx is not None:
             workbook._rust_wb.set_sheet_title(sheet_idx, title)
@@ -563,6 +565,14 @@ class Worksheet:
     def add_data_validation(self, dv):
         self._data_validations.append(dv)
 
+    def add_table(self, table):
+        self._tables.append(table)
+
+    def add_chart(self, chart, anchor=None):
+        if anchor is not None:
+            chart._anchor = anchor
+        self._charts.append(chart)
+
     # ---- Flush formats to Rust at save time ----
 
     def _flush_formats_to_rust(self):
@@ -784,6 +794,107 @@ class Worksheet:
             if img.anchor:
                 r, c = _parse_cell_ref(img.anchor)
                 wb.add_image(idx, r - 1, c - 1, img._data, None, None)
+
+        # Tables
+        for table in self._tables:
+            table_data = {
+                "ref": table.ref,
+                "name": table.displayName,
+                "header_row": table.headerRowCount > 0,
+                "total_row": table.totalsRowCount > 0,
+            }
+            if table.tableStyleInfo is not None:
+                si = table.tableStyleInfo
+                table_data["style"] = si.name
+                table_data["first_column"] = si.showFirstColumn
+                table_data["last_column"] = si.showLastColumn
+                table_data["row_stripes"] = si.showRowStripes
+                table_data["column_stripes"] = si.showColumnStripes
+            if table.tableColumns:
+                table_data["columns"] = [
+                    {"name": tc.name} for tc in table.tableColumns
+                ]
+            wb.add_table(idx, json.dumps(table_data))
+
+        # Charts
+        for chart in self._charts:
+            chart_data = self._serialize_chart(chart)
+            if chart_data:
+                wb.add_chart(idx, json.dumps(chart_data))
+
+    def _serialize_chart(self, chart):
+        """Serialize a chart object to a JSON-compatible dict."""
+        from openpyxl_rust.chart.base import _CellTitle
+
+        if not chart._anchor:
+            return None
+
+        r, c = _parse_cell_ref(chart._anchor)
+
+        # Determine rust_xlsxwriter chart type
+        chart_type = chart.chart_type
+        if chart_type == "column" and hasattr(chart, 'type') and chart.type == "bar":
+            chart_type = "bar"
+
+        # Handle grouping → stacked/percentStacked variants
+        grouping = getattr(chart, 'grouping', None)
+        if grouping == "stacked" and chart_type in ("column", "bar", "line", "area"):
+            chart_type = chart_type + "_stacked"
+        elif grouping == "percentStacked" and chart_type in ("column", "bar", "line", "area"):
+            chart_type = chart_type + "_percent_stacked"
+
+        # Convert dimensions from cm to pixels (approx 37.8 px/cm)
+        width_px = int(chart.width * 37.8) if chart.width else 480
+        height_px = int(chart.height * 37.8) if chart.height else 288
+
+        series_list = []
+        for s in chart.series:
+            s_data = {}
+            if s.values is not None:
+                ref = s.values
+                sheet_title = ref.worksheet.title if ref.worksheet else "Sheet1"
+                s_data["values"] = {
+                    "sheet": sheet_title,
+                    "r1": ref.min_row - 1,
+                    "c1": ref.min_col - 1,
+                    "r2": ref.max_row - 1,
+                    "c2": ref.max_col - 1,
+                }
+            if s.categories is not None:
+                ref = s.categories
+                sheet_title = ref.worksheet.title if ref.worksheet else "Sheet1"
+                s_data["categories"] = {
+                    "sheet": sheet_title,
+                    "r1": ref.min_row - 1,
+                    "c1": ref.min_col - 1,
+                    "r2": ref.max_row - 1,
+                    "c2": ref.max_col - 1,
+                }
+            if s.title is not None:
+                if isinstance(s.title, _CellTitle):
+                    s_data["title"] = s.title.resolve()
+                else:
+                    s_data["title"] = str(s.title)
+            series_list.append(s_data)
+
+        data = {
+            "type": chart_type,
+            "anchor_row": r - 1,
+            "anchor_col": c - 1,
+            "width": width_px,
+            "height": height_px,
+            "legend": chart.legend,
+            "series": series_list,
+        }
+        if chart.title is not None:
+            data["title"] = str(chart.title)
+        if chart.x_axis_title is not None:
+            data["x_axis_title"] = str(chart.x_axis_title)
+        if chart.y_axis_title is not None:
+            data["y_axis_title"] = str(chart.y_axis_title)
+        if chart.style is not None:
+            data["style"] = chart.style
+        return data
 
     # ---- Conditional formatting serialization (same as before) ----
 

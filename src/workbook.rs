@@ -276,6 +276,20 @@ impl RustWorkbook {
         Ok(())
     }
 
+    fn add_table(&mut self, sheet: usize, json: String) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.tables.push(json);
+        Ok(())
+    }
+
+    fn add_chart(&mut self, sheet: usize, json: String) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.charts.push(json);
+        Ok(())
+    }
+
     fn clear_cells(&mut self, sheet: usize) -> PyResult<()> {
         let sd = self.sheets.get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;

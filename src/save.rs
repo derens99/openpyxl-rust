@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use rust_xlsxwriter::{Format, Formula, Workbook};
+use rust_xlsxwriter::{Chart, ChartType, Format, Formula, Table, TableColumn, TableStyle, Workbook};
 use crate::types::*;
 use crate::format::*;
 use crate::parse::*;
@@ -704,6 +704,214 @@ pub(crate) fn save_workbook(
                     }
                     _ => {} // Unknown rule type, skip
                 }
+            }
+
+            // Tables
+            for table_json_str in &sd.tables {
+                let tv: serde_json::Value = serde_json::from_str(table_json_str)
+                    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("Table JSON error: {}", e)))?;
+                let tobj = tv.as_object().ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Table JSON must be an object"))?;
+
+                let ref_str = tobj.get("ref").and_then(|v| v.as_str()).unwrap_or("A1:A1");
+                let (r1, c1, r2, c2) = match parse_cell_range(ref_str) {
+                    Some(coords) => coords,
+                    None => continue,
+                };
+
+                let mut table = Table::new();
+
+                if let Some(name) = tobj.get("name").and_then(|v| v.as_str()) {
+                    if !name.is_empty() {
+                        table = table.set_name(name);
+                    }
+                }
+
+                if let Some(style_name) = tobj.get("style").and_then(|v| v.as_str()) {
+                    let ts = match style_name {
+                        "TableStyleLight1" => TableStyle::Light1,
+                        "TableStyleLight2" => TableStyle::Light2,
+                        "TableStyleLight3" => TableStyle::Light3,
+                        "TableStyleLight4" => TableStyle::Light4,
+                        "TableStyleLight5" => TableStyle::Light5,
+                        "TableStyleLight6" => TableStyle::Light6,
+                        "TableStyleLight7" => TableStyle::Light7,
+                        "TableStyleLight8" => TableStyle::Light8,
+                        "TableStyleLight9" => TableStyle::Light9,
+                        "TableStyleLight10" => TableStyle::Light10,
+                        "TableStyleLight11" => TableStyle::Light11,
+                        "TableStyleLight12" => TableStyle::Light12,
+                        "TableStyleLight13" => TableStyle::Light13,
+                        "TableStyleLight14" => TableStyle::Light14,
+                        "TableStyleLight15" => TableStyle::Light15,
+                        "TableStyleLight16" => TableStyle::Light16,
+                        "TableStyleLight17" => TableStyle::Light17,
+                        "TableStyleLight18" => TableStyle::Light18,
+                        "TableStyleLight19" => TableStyle::Light19,
+                        "TableStyleLight20" => TableStyle::Light20,
+                        "TableStyleLight21" => TableStyle::Light21,
+                        "TableStyleMedium1" => TableStyle::Medium1,
+                        "TableStyleMedium2" => TableStyle::Medium2,
+                        "TableStyleMedium3" => TableStyle::Medium3,
+                        "TableStyleMedium4" => TableStyle::Medium4,
+                        "TableStyleMedium5" => TableStyle::Medium5,
+                        "TableStyleMedium6" => TableStyle::Medium6,
+                        "TableStyleMedium7" => TableStyle::Medium7,
+                        "TableStyleMedium8" => TableStyle::Medium8,
+                        "TableStyleMedium9" => TableStyle::Medium9,
+                        "TableStyleMedium10" => TableStyle::Medium10,
+                        "TableStyleMedium11" => TableStyle::Medium11,
+                        "TableStyleMedium12" => TableStyle::Medium12,
+                        "TableStyleMedium13" => TableStyle::Medium13,
+                        "TableStyleMedium14" => TableStyle::Medium14,
+                        "TableStyleMedium15" => TableStyle::Medium15,
+                        "TableStyleMedium16" => TableStyle::Medium16,
+                        "TableStyleMedium17" => TableStyle::Medium17,
+                        "TableStyleMedium18" => TableStyle::Medium18,
+                        "TableStyleMedium19" => TableStyle::Medium19,
+                        "TableStyleMedium20" => TableStyle::Medium20,
+                        "TableStyleMedium21" => TableStyle::Medium21,
+                        "TableStyleMedium22" => TableStyle::Medium22,
+                        "TableStyleMedium23" => TableStyle::Medium23,
+                        "TableStyleMedium24" => TableStyle::Medium24,
+                        "TableStyleMedium25" => TableStyle::Medium25,
+                        "TableStyleMedium26" => TableStyle::Medium26,
+                        "TableStyleMedium27" => TableStyle::Medium27,
+                        "TableStyleMedium28" => TableStyle::Medium28,
+                        "TableStyleDark1" => TableStyle::Dark1,
+                        "TableStyleDark2" => TableStyle::Dark2,
+                        "TableStyleDark3" => TableStyle::Dark3,
+                        "TableStyleDark4" => TableStyle::Dark4,
+                        "TableStyleDark5" => TableStyle::Dark5,
+                        "TableStyleDark6" => TableStyle::Dark6,
+                        "TableStyleDark7" => TableStyle::Dark7,
+                        "TableStyleDark8" => TableStyle::Dark8,
+                        "TableStyleDark9" => TableStyle::Dark9,
+                        "TableStyleDark10" => TableStyle::Dark10,
+                        "TableStyleDark11" => TableStyle::Dark11,
+                        _ => TableStyle::Medium9,
+                    };
+                    table = table.set_style(ts);
+                }
+
+                if let Some(hr) = tobj.get("header_row").and_then(|v| v.as_bool()) {
+                    table = table.set_header_row(hr);
+                }
+                if let Some(tr) = tobj.get("total_row").and_then(|v| v.as_bool()) {
+                    table = table.set_total_row(tr);
+                }
+                if let Some(fc) = tobj.get("first_column").and_then(|v| v.as_bool()) {
+                    table = table.set_first_column(fc);
+                }
+                if let Some(lc) = tobj.get("last_column").and_then(|v| v.as_bool()) {
+                    table = table.set_last_column(lc);
+                }
+                if let Some(rs) = tobj.get("row_stripes").and_then(|v| v.as_bool()) {
+                    table = table.set_banded_rows(rs);
+                }
+                if let Some(cs) = tobj.get("column_stripes").and_then(|v| v.as_bool()) {
+                    table = table.set_banded_columns(cs);
+                }
+
+                if let Some(cols) = tobj.get("columns").and_then(|v| v.as_array()) {
+                    let tc_vec: Vec<TableColumn> = cols.iter().map(|c| {
+                        let name = c.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                        TableColumn::new().set_header(name)
+                    }).collect();
+                    table = table.set_columns(&tc_vec);
+                }
+
+                worksheet.add_table(r1, c1, r2, c2, &table).map_err(xlsx_err)?;
+            }
+
+            // Charts
+            for chart_json_str in &sd.charts {
+                let cv: serde_json::Value = serde_json::from_str(chart_json_str)
+                    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("Chart JSON error: {}", e)))?;
+                let cobj = cv.as_object().ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Chart JSON must be an object"))?;
+
+                let type_str = cobj.get("type").and_then(|v| v.as_str()).unwrap_or("column");
+                let chart_type = match type_str {
+                    "area" => ChartType::Area,
+                    "area_stacked" => ChartType::AreaStacked,
+                    "area_percent_stacked" => ChartType::AreaPercentStacked,
+                    "bar" => ChartType::Bar,
+                    "bar_stacked" => ChartType::BarStacked,
+                    "bar_percent_stacked" => ChartType::BarPercentStacked,
+                    "column" => ChartType::Column,
+                    "column_stacked" => ChartType::ColumnStacked,
+                    "column_percent_stacked" => ChartType::ColumnPercentStacked,
+                    "doughnut" => ChartType::Doughnut,
+                    "line" => ChartType::Line,
+                    "line_stacked" => ChartType::LineStacked,
+                    "line_percent_stacked" => ChartType::LinePercentStacked,
+                    "pie" => ChartType::Pie,
+                    "radar" => ChartType::Radar,
+                    "scatter" => ChartType::Scatter,
+                    "stock" => ChartType::Stock,
+                    _ => ChartType::Column,
+                };
+
+                let mut chart = Chart::new(chart_type);
+
+                // Title
+                if let Some(title) = cobj.get("title").and_then(|v| v.as_str()) {
+                    chart.title().set_name(title);
+                }
+
+                // Axis titles
+                if let Some(x_title) = cobj.get("x_axis_title").and_then(|v| v.as_str()) {
+                    chart.x_axis().set_name(x_title);
+                }
+                if let Some(y_title) = cobj.get("y_axis_title").and_then(|v| v.as_str()) {
+                    chart.y_axis().set_name(y_title);
+                }
+
+                // Dimensions
+                if let Some(w) = cobj.get("width").and_then(|v| v.as_u64()) {
+                    chart.set_width(w as u32);
+                }
+                if let Some(h) = cobj.get("height").and_then(|v| v.as_u64()) {
+                    chart.set_height(h as u32);
+                }
+
+                // Legend
+                if let Some(false) = cobj.get("legend").and_then(|v| v.as_bool()) {
+                    chart.legend().set_hidden();
+                }
+
+                // Series
+                if let Some(series_arr) = cobj.get("series").and_then(|v| v.as_array()) {
+                    for s_val in series_arr {
+                        let series = chart.add_series();
+
+                        if let Some(vals) = s_val.get("values").and_then(|v| v.as_object()) {
+                            let sheet = vals.get("sheet").and_then(|v| v.as_str()).unwrap_or("Sheet1");
+                            let sr1 = vals.get("r1").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            let sc1 = vals.get("c1").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
+                            let sr2 = vals.get("r2").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            let sc2 = vals.get("c2").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
+                            series.set_values((sheet, sr1, sc1, sr2, sc2));
+                        }
+
+                        if let Some(cats) = s_val.get("categories").and_then(|v| v.as_object()) {
+                            let sheet = cats.get("sheet").and_then(|v| v.as_str()).unwrap_or("Sheet1");
+                            let sr1 = cats.get("r1").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            let sc1 = cats.get("c1").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
+                            let sr2 = cats.get("r2").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            let sc2 = cats.get("c2").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
+                            series.set_categories((sheet, sr1, sc1, sr2, sc2));
+                        }
+
+                        if let Some(title) = s_val.get("title").and_then(|v| v.as_str()) {
+                            series.set_name(title);
+                        }
+                    }
+                }
+
+                // Insert at anchor position
+                let anchor_row = cobj.get("anchor_row").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                let anchor_col = cobj.get("anchor_col").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
+                worksheet.insert_chart(anchor_row, anchor_col, &chart).map_err(xlsx_err)?;
             }
         }
 

@@ -103,6 +103,8 @@ pub(crate) struct SheetData {
     pub(crate) images: Vec<(u32, u16, Vec<u8>, Option<f64>, Option<f64>)>,  // (row, col, image_data, scale_width, scale_height)
     pub(crate) data_validations: Vec<String>,
     pub(crate) conditional_formats: Vec<String>,
+    pub(crate) tables: Vec<String>,
+    pub(crate) charts: Vec<String>,
     pub(crate) min_row: Option<u32>,
     pub(crate) max_row: Option<u32>,
     pub(crate) min_col: Option<u16>,
@@ -127,6 +129,8 @@ impl SheetData {
             images: Vec::new(),
             data_validations: Vec::new(),
             conditional_formats: Vec::new(),
+            tables: Vec::new(),
+            charts: Vec::new(),
             min_row: None,
             max_row: None,
             min_col: None,
