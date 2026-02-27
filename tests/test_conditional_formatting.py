@@ -1,15 +1,14 @@
 """Tests for conditional formatting support."""
+
 import os
 import tempfile
+
 import pytest
 
 from openpyxl_rust import Workbook
-from openpyxl_rust.formatting.rule import (
-    ColorScaleRule, DataBarRule, IconSetRule, CellIsRule, FormulaRule
-)
+from openpyxl_rust.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule, FormulaRule, IconSetRule
 from openpyxl_rust.styles.fills import PatternFill
 from openpyxl_rust.styles.fonts import Font
-from openpyxl_rust.styles.borders import Border, Side
 
 
 @pytest.fixture
@@ -29,6 +28,7 @@ def _save_and_reload(wb):
     try:
         wb.save(path)
         import openpyxl
+
         wb2 = openpyxl.load_workbook(path)
         return wb2
     finally:
@@ -40,10 +40,7 @@ class TestColorScale:
     def test_color_scale_2(self, wb_with_data):
         """Two-color scale (min red -> max green)."""
         wb, ws = wb_with_data
-        rule = ColorScaleRule(
-            start_type="min", start_color="FF0000",
-            end_type="max", end_color="00FF00"
-        )
+        rule = ColorScaleRule(start_type="min", start_color="FF0000", end_type="max", end_color="00FF00")
         ws.conditional_formatting.add("A1:A10", rule)
 
         wb2 = _save_and_reload(wb)
@@ -56,9 +53,13 @@ class TestColorScale:
         """Three-color scale with midpoint."""
         wb, ws = wb_with_data
         rule = ColorScaleRule(
-            start_type="min", start_color="FF0000",
-            mid_type="percentile", mid_value=50, mid_color="FFFF00",
-            end_type="max", end_color="00FF00"
+            start_type="min",
+            start_color="FF0000",
+            mid_type="percentile",
+            mid_value=50,
+            mid_color="FFFF00",
+            end_type="max",
+            end_color="00FF00",
         )
         ws.conditional_formatting.add("A1:A10", rule)
 
@@ -72,10 +73,7 @@ class TestDataBar:
     def test_data_bar(self, wb_with_data):
         """Basic data bar with custom color."""
         wb, ws = wb_with_data
-        rule = DataBarRule(
-            start_type="min", end_type="max",
-            color="638EC6"
-        )
+        rule = DataBarRule(start_type="min", end_type="max", color="638EC6")
         ws.conditional_formatting.add("A1:A10", rule)
 
         wb2 = _save_and_reload(wb)
@@ -86,10 +84,7 @@ class TestDataBar:
     def test_data_bar_bar_only(self, wb_with_data):
         """Data bar with showValue=False (bar only, no numbers)."""
         wb, ws = wb_with_data
-        rule = DataBarRule(
-            start_type="min", end_type="max",
-            color="638EC6", showValue=False
-        )
+        rule = DataBarRule(start_type="min", end_type="max", color="638EC6", showValue=False)
         ws.conditional_formatting.add("A1:A10", rule)
 
         wb2 = _save_and_reload(wb)
@@ -127,11 +122,7 @@ class TestCellIs:
         """CellIsRule with lessThan operator and fill format."""
         wb, ws = wb_with_data
         red_fill = PatternFill(fill_type="solid", start_color="FFC7CE")
-        rule = CellIsRule(
-            operator="lessThan",
-            formula=["50"],
-            fill=red_fill
-        )
+        rule = CellIsRule(operator="lessThan", formula=["50"], fill=red_fill)
         ws.conditional_formatting.add("A1:A10", rule)
 
         wb2 = _save_and_reload(wb)
@@ -143,11 +134,7 @@ class TestCellIs:
         """CellIsRule with between operator."""
         wb, ws = wb_with_data
         green_fill = PatternFill(fill_type="solid", start_color="C6EFCE")
-        rule = CellIsRule(
-            operator="between",
-            formula=["30", "70"],
-            fill=green_fill
-        )
+        rule = CellIsRule(operator="between", formula=["30", "70"], fill=green_fill)
         ws.conditional_formatting.add("A1:A10", rule)
 
         wb2 = _save_and_reload(wb)
@@ -160,12 +147,7 @@ class TestCellIs:
         wb, ws = wb_with_data
         red_font = Font(bold=True, color="9C0006")
         red_fill = PatternFill(fill_type="solid", start_color="FFC7CE")
-        rule = CellIsRule(
-            operator="greaterThan",
-            formula=["80"],
-            font=red_font,
-            fill=red_fill
-        )
+        rule = CellIsRule(operator="greaterThan", formula=["80"], font=red_font, fill=red_fill)
         ws.conditional_formatting.add("A1:A10", rule)
 
         wb2 = _save_and_reload(wb)
@@ -177,11 +159,7 @@ class TestCellIs:
         """CellIsRule with equal operator."""
         wb, ws = wb_with_data
         fill = PatternFill(fill_type="solid", start_color="FFFF00")
-        rule = CellIsRule(
-            operator="equal",
-            formula=["50"],
-            fill=fill
-        )
+        rule = CellIsRule(operator="equal", formula=["50"], fill=fill)
         ws.conditional_formatting.add("A1:A10", rule)
 
         wb2 = _save_and_reload(wb)
@@ -195,10 +173,7 @@ class TestFormulaRule:
         """FormulaRule with formula and fill."""
         wb, ws = wb_with_data
         fill = PatternFill(fill_type="solid", start_color="FFFF00")
-        rule = FormulaRule(
-            formula=["ISBLANK(A1)"],
-            fill=fill
-        )
+        rule = FormulaRule(formula=["ISBLANK(A1)"], fill=fill)
         ws.conditional_formatting.add("A1:A10", rule)
 
         wb2 = _save_and_reload(wb)
@@ -211,11 +186,7 @@ class TestFormulaRule:
         wb, ws = wb_with_data
         font = Font(bold=True, color="FF0000")
         fill = PatternFill(fill_type="solid", start_color="FFCCCC")
-        rule = FormulaRule(
-            formula=["MOD(ROW(),2)=0"],
-            font=font,
-            fill=fill
-        )
+        rule = FormulaRule(formula=["MOD(ROW(),2)=0"], font=font, fill=fill)
         ws.conditional_formatting.add("A1:A10", rule)
 
         wb2 = _save_and_reload(wb)
@@ -231,16 +202,8 @@ class TestMultipleRules:
         red_fill = PatternFill(fill_type="solid", start_color="FFC7CE")
         green_fill = PatternFill(fill_type="solid", start_color="C6EFCE")
 
-        rule1 = CellIsRule(
-            operator="lessThan",
-            formula=["50"],
-            fill=red_fill
-        )
-        rule2 = CellIsRule(
-            operator="greaterThanOrEqual",
-            formula=["50"],
-            fill=green_fill
-        )
+        rule1 = CellIsRule(operator="lessThan", formula=["50"], fill=red_fill)
+        rule2 = CellIsRule(operator="greaterThanOrEqual", formula=["50"], fill=green_fill)
         ws.conditional_formatting.add("A1:A10", rule1)
         ws.conditional_formatting.add("A1:A10", rule2)
 
@@ -257,10 +220,7 @@ class TestMultipleRules:
         for i in range(1, 11):
             ws.cell(row=i, column=2, value=i * 5)
 
-        rule1 = ColorScaleRule(
-            start_type="min", start_color="FF0000",
-            end_type="max", end_color="00FF00"
-        )
+        rule1 = ColorScaleRule(start_type="min", start_color="FF0000", end_type="max", end_color="00FF00")
         rule2 = DataBarRule(color="638EC6")
 
         ws.conditional_formatting.add("A1:A10", rule1)
@@ -278,10 +238,7 @@ class TestConditionalFormatSaveValid:
         wb, ws = wb_with_data
 
         # Apply one of each type of conditional format
-        rule1 = ColorScaleRule(
-            start_type="min", start_color="FF0000",
-            end_type="max", end_color="00FF00"
-        )
+        rule1 = ColorScaleRule(start_type="min", start_color="FF0000", end_type="max", end_color="00FF00")
         ws.conditional_formatting.add("A1:A10", rule1)
 
         rule2 = DataBarRule(color="638EC6")
@@ -308,6 +265,7 @@ class TestConditionalFormatSaveValid:
 
             # Verify openpyxl can read it without errors
             import openpyxl
+
             wb2 = openpyxl.load_workbook(path)
             ws2 = wb2.active
 

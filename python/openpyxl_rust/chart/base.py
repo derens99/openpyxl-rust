@@ -14,8 +14,8 @@ class _ChartBase:
         self.style = None
         self.x_axis_title = None
         self.y_axis_title = None
-        self.width = 15      # cm (openpyxl default)
-        self.height = 7.5    # cm (openpyxl default)
+        self.width = 15  # cm (openpyxl default)
+        self.height = 7.5  # cm (openpyxl default)
         self.legend = True
         self._anchor = None  # set by ws.add_chart(chart, "E5")
 
@@ -36,8 +36,7 @@ class _ChartBase:
                 if titles_from_data:
                     # Title is in the first column of that row
                     title = None  # Will be resolved from cell at flush time
-                s = Series(values=_RowReference(ref.worksheet, r, ref.min_col, ref.max_col),
-                           title=title)
+                s = Series(values=_RowReference(ref.worksheet, r, ref.min_col, ref.max_col), title=title)
                 self.series.append(s)
         else:
             # Column-wise: one series per column
@@ -54,10 +53,13 @@ class _ChartBase:
                     # Title comes from first row of this column
                     title = _CellTitle(ref.worksheet, ref.min_row, col)
                 from openpyxl_rust.chart.reference import Reference
+
                 val_ref = Reference(
                     worksheet=ref.worksheet,
-                    min_col=col, max_col=col,
-                    min_row=data_start_row, max_row=ref.max_row,
+                    min_col=col,
+                    max_col=col,
+                    min_row=data_start_row,
+                    max_row=ref.max_row,
                 )
                 s = Series(values=val_ref, title=title)
                 self.series.append(s)
@@ -76,7 +78,7 @@ class _ChartBase:
 class _CellTitle:
     """Lazy title resolved from a cell reference at serialization time."""
 
-    __slots__ = ('worksheet', 'row', 'col')
+    __slots__ = ("col", "row", "worksheet")
 
     def __init__(self, worksheet, row, col):
         self.worksheet = worksheet
@@ -92,7 +94,7 @@ class _CellTitle:
 class _RowReference:
     """A reference to a single row range (for from_rows=True)."""
 
-    __slots__ = ('worksheet', 'row', 'min_col', 'max_col')
+    __slots__ = ("max_col", "min_col", "row", "worksheet")
 
     def __init__(self, worksheet, row, min_col, max_col):
         self.worksheet = worksheet
@@ -106,12 +108,14 @@ class _RowReference:
 
 # ---- Concrete chart types ----
 
+
 class BarChart(_ChartBase):
     """Vertical bar chart (Column chart in Excel terms).
 
     openpyxl's BarChart defaults to type="col" (vertical columns).
     Set self.type = "bar" for horizontal bars.
     """
+
     chart_type = "column"
 
     def __init__(self):
@@ -122,11 +126,13 @@ class BarChart(_ChartBase):
 
 class BarChart3D(BarChart):
     """3D bar chart — renders same as BarChart in rust_xlsxwriter."""
+
     pass
 
 
 class LineChart(_ChartBase):
     """Line chart."""
+
     chart_type = "line"
 
     def __init__(self):
@@ -136,21 +142,25 @@ class LineChart(_ChartBase):
 
 class LineChart3D(LineChart):
     """3D line chart — renders same as LineChart in rust_xlsxwriter."""
+
     pass
 
 
 class PieChart(_ChartBase):
     """Pie chart."""
+
     chart_type = "pie"
 
 
 class PieChart3D(PieChart):
     """3D pie chart — renders same as PieChart in rust_xlsxwriter."""
+
     pass
 
 
 class AreaChart(_ChartBase):
     """Area chart."""
+
     chart_type = "area"
 
     def __init__(self):
@@ -160,24 +170,29 @@ class AreaChart(_ChartBase):
 
 class AreaChart3D(AreaChart):
     """3D area chart — renders same as AreaChart in rust_xlsxwriter."""
+
     pass
 
 
 class ScatterChart(_ChartBase):
     """Scatter (XY) chart."""
+
     chart_type = "scatter"
 
 
 class DoughnutChart(_ChartBase):
     """Doughnut chart."""
+
     chart_type = "doughnut"
 
 
 class RadarChart(_ChartBase):
     """Radar chart."""
+
     chart_type = "radar"
 
 
 class StockChart(_ChartBase):
     """Stock chart."""
+
     chart_type = "stock"

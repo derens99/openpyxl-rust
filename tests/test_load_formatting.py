@@ -1,11 +1,13 @@
 """Tests for formatting-preserving load (data_only=False)."""
-import os
-import tempfile
-import pytest
+
 import openpyxl
-from openpyxl.styles import Font as OFont, PatternFill as OFill, Border as OBorder, Side as OSide, Alignment as OAlign
-from openpyxl_rust import load_workbook, Workbook
-from openpyxl_rust.styles import Font, PatternFill, Border, Side, Alignment
+from openpyxl.styles import Alignment as OAlign
+from openpyxl.styles import Border as OBorder
+from openpyxl.styles import Font as OFont
+from openpyxl.styles import PatternFill as OFill
+from openpyxl.styles import Side as OSide
+
+from openpyxl_rust import load_workbook
 
 
 def _create_formatted_xlsx(path):

@@ -1,13 +1,21 @@
-from openpyxl_rust.worksheet import _parse_cell_ref
-
-
 class DataValidation:
-    def __init__(self, type=None, formula1=None, formula2=None,
-                 allow_blank=False, showDropDown=False,
-                 showErrorMessage=False, showInputMessage=False,
-                 promptTitle=None, prompt=None,
-                 errorTitle=None, error=None, errorStyle=None,
-                 operator=None, sqref=None):
+    def __init__(
+        self,
+        type=None,
+        formula1=None,
+        formula2=None,
+        allow_blank=False,
+        showDropDown=False,
+        showErrorMessage=False,
+        showInputMessage=False,
+        promptTitle=None,
+        prompt=None,
+        errorTitle=None,
+        error=None,
+        errorStyle=None,
+        operator=None,
+        sqref=None,
+    ):
         self.type = type
         self.formula1 = formula1
         self.formula2 = formula2

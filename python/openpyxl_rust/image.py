@@ -2,7 +2,7 @@ class Image:
     def __init__(self, img):
         """img can be a file path (str) or bytes."""
         if isinstance(img, str):
-            with open(img, 'rb') as f:
+            with open(img, "rb") as f:
                 self._data = f.read()
         elif isinstance(img, bytes):
             self._data = img

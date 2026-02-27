@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev, "feat/**", "hotfix/**"]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+
+  # ── Python lint & format ───────────────────────────────────────
+  ruff:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Format check
+        run: uvx ruff format --check python/ tests/
+
+      - name: Lint check
+        run: uvx ruff check python/ tests/
+
+  # ── Rust lint & format ─────────────────────────────────────────
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Create venv for PyO3
+        run: uv venv --python 3.12
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Lint check
+        run: |
+          source .venv/bin/activate
+          cargo clippy -- -D warnings
+
+  # ── Test matrix ────────────────────────────────────────────────
+  test:
+    name: Test (Python ${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [ruff, clippy]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: uv venv --python ${{ matrix.python-version }} && uv pip install maturin pytest openpyxl
+
+      - name: Build extension
+        run: uv run maturin develop --release
+
+      - name: Run tests
+        run: uv run pytest tests/ -q

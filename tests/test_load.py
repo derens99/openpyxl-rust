@@ -2,12 +2,12 @@
 import io
 import os
 import tempfile
-from datetime import datetime
 from pathlib import Path
 
-import pytest
 import openpyxl as real_openpyxl
-from openpyxl_rust import Workbook, load_workbook
+import pytest
+
+from openpyxl_rust import load_workbook
 
 
 def _make_test_file(setup_fn):
@@ -42,6 +42,7 @@ def test_load_boolean():
     def setup(wb):
         wb.active["A1"] = True
         wb.active["A2"] = False
+
     path = _make_test_file(setup)
     try:
         wb = load_workbook(path)
@@ -57,6 +58,7 @@ def test_load_multiple_sheets():
         wb.active["A1"] = "one"
         ws2 = wb.create_sheet("Second")
         ws2["A1"] = "two"
+
     path = _make_test_file(setup)
     try:
         wb = load_workbook(path)
@@ -71,6 +73,7 @@ def test_load_empty_cells():
     def setup(wb):
         wb.active["A1"] = "data"
         wb.active["C3"] = "sparse"
+
     path = _make_test_file(setup)
     try:
         wb = load_workbook(path)
@@ -87,6 +90,7 @@ def test_load_large_data():
         for r in range(1, 101):
             ws.cell(row=r, column=1, value=f"row_{r}")
             ws.cell(row=r, column=2, value=r * 1.5)
+
     path = _make_test_file(setup)
     try:
         wb = load_workbook(path)
@@ -99,8 +103,10 @@ def test_load_large_data():
 
 def test_load_then_save():
     """Load a file, modify it, save to new file, verify."""
+
     def setup(wb):
         wb.active["A1"] = "original"
+
     path = _make_test_file(setup)
     try:
         wb = load_workbook(path)
@@ -121,8 +127,10 @@ def test_load_then_save():
 
 def test_load_integers():
     """Verify integer values are returned as int, not float."""
+
     def setup(wb):
         wb.active["A1"] = 42
+
     path = _make_test_file(setup)
     try:
         wb = load_workbook(path)
@@ -136,6 +144,7 @@ def test_load_integers():
 # =====================================================================
 # BytesIO / file-like object support tests
 # =====================================================================
+
 
 def test_load_from_bytesio():
     """Load workbook from a BytesIO object."""
@@ -152,12 +161,14 @@ def test_load_from_bytesio():
 
 def test_load_from_bytesio_multiple_sheets():
     """Load a multi-sheet workbook from BytesIO."""
+
     def setup(wb):
         wb.active.title = "Alpha"
         wb.active["A1"] = "first"
         ws2 = wb.create_sheet("Beta")
         ws2["A1"] = "second"
         ws2["A2"] = 99
+
     path = _make_test_file(setup)
     try:
         with open(path, "rb") as f:
@@ -204,7 +215,7 @@ def test_load_from_string_path():
 
 def test_load_invalid_type_raises_typeerror():
     """Passing an invalid type (e.g. int) should raise TypeError with a clear message."""
-    with pytest.raises(TypeError, match="file path.*file-like object"):
+    with pytest.raises(TypeError, match=r"file path.*file-like object"):
         load_workbook(12345)
 
 
@@ -218,9 +229,8 @@ def test_load_text_mode_file_raises_typeerror():
     """A file opened in text mode should raise TypeError (read() returns str, not bytes)."""
     path = _make_test_file(lambda wb: setattr(wb.active["A1"], "value", "text"))
     try:
-        with open(path, "r") as fh:
-            with pytest.raises(TypeError, match="binary mode"):
-                load_workbook(fh)
+        with open(path) as fh, pytest.raises(TypeError, match="binary mode"):
+            load_workbook(fh)
     finally:
         os.unlink(path)
 

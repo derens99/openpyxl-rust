@@ -9,8 +9,7 @@ class Reference:
         chart.add_data(ref, titles_from_data=True)
     """
 
-    def __init__(self, worksheet=None, min_col=None, min_row=None,
-                 max_col=None, max_row=None):
+    def __init__(self, worksheet=None, min_col=None, min_row=None, max_col=None, max_row=None):
         self.worksheet = worksheet
         self.min_col = min_col
         self.min_row = min_row

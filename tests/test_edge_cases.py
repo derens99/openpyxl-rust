@@ -2,8 +2,8 @@ import os
 import tempfile
 
 import openpyxl as real_openpyxl
+
 from openpyxl_rust import Workbook
-from openpyxl_rust.styles import Font
 
 
 def _save_and_reload(wb):

@@ -1,4 +1,5 @@
 import pytest
+
 from openpyxl_rust import Workbook
 
 
@@ -26,6 +27,7 @@ def test_unsupported_type_set():
 def test_unsupported_type_custom_object():
     class Foo:
         pass
+
     wb = Workbook()
     ws = wb.active
     with pytest.raises(TypeError, match="Unsupported cell value type: Foo"):
@@ -33,7 +35,8 @@ def test_unsupported_type_custom_object():
 
 
 def test_supported_types_no_error():
-    from datetime import datetime, date
+    from datetime import date, datetime
+
     wb = Workbook()
     ws = wb.active
     ws["A1"] = "string"

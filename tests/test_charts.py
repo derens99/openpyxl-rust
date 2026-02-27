@@ -1,13 +1,18 @@
 """Tests for Chart support."""
-import os
-import tempfile
-import pytest
+
 import openpyxl
+
 from openpyxl_rust import Workbook
 from openpyxl_rust.chart import (
-    Reference, Series,
-    BarChart, LineChart, PieChart, AreaChart,
-    ScatterChart, DoughnutChart, RadarChart,
+    AreaChart,
+    BarChart,
+    DoughnutChart,
+    LineChart,
+    PieChart,
+    RadarChart,
+    Reference,
+    ScatterChart,
+    Series,
 )
 
 
@@ -246,7 +251,7 @@ class TestChartOptions:
 
         chart = BarChart()
         chart.title = "Big Chart"
-        chart.width = 20   # cm
+        chart.width = 20  # cm
         chart.height = 12  # cm
         data = Reference(ws, min_col=2, min_row=2, max_row=5)
         chart.add_data(data)

@@ -1,14 +1,12 @@
 """Formatting-preserving loader using real openpyxl for reading."""
 
-from datetime import datetime, date, time
-
 
 def _convert_color(color_obj):
     """Convert an openpyxl Color object to a hex string or None."""
     if color_obj is None:
         return None
     # openpyxl Color has .rgb (ARGB string like "FF000000") or .theme or .indexed
-    if hasattr(color_obj, 'rgb') and color_obj.rgb and color_obj.rgb != "00000000":
+    if hasattr(color_obj, "rgb") and color_obj.rgb and color_obj.rgb != "00000000":
         rgb = color_obj.rgb
         # openpyxl Color.rgb is sometimes a str like "FF0000FF" (ARGB)
         if isinstance(rgb, str) and len(rgb) == 8:
@@ -70,15 +68,15 @@ def _convert_fill(src_fill):
         return None
 
     # openpyxl has both PatternFill and GradientFill; we only support PatternFill
-    fill_type = getattr(src_fill, 'fill_type', None) or getattr(src_fill, 'patternType', None)
+    fill_type = getattr(src_fill, "fill_type", None) or getattr(src_fill, "patternType", None)
     if fill_type is None or fill_type == "none":
         return None
 
     start_color = None
     end_color = None
-    if hasattr(src_fill, 'fgColor') and src_fill.fgColor:
+    if hasattr(src_fill, "fgColor") and src_fill.fgColor:
         start_color = _convert_color(src_fill.fgColor)
-    if hasattr(src_fill, 'bgColor') and src_fill.bgColor:
+    if hasattr(src_fill, "bgColor") and src_fill.bgColor:
         end_color = _convert_color(src_fill.bgColor)
 
     return PatternFill(
@@ -123,22 +121,34 @@ def _has_formatting(src_cell):
     """Check if an openpyxl cell has any non-default formatting."""
     # Check font (non-default = bold, italic, color, size != 11, name != Calibri, etc.)
     f = src_cell.font
-    if f and (f.bold or f.italic or f.strikethrough or f.underline or f.vertAlign
-              or (f.color and _convert_color(f.color))
-              or (f.name and f.name != "Calibri")
-              or (f.size is not None and f.size != 11)):
+    if f and (
+        f.bold
+        or f.italic
+        or f.strikethrough
+        or f.underline
+        or f.vertAlign
+        or (f.color and _convert_color(f.color))
+        or (f.name and f.name != "Calibri")
+        or (f.size is not None and f.size != 11)
+    ):
         return True
 
     # Check alignment
     a = src_cell.alignment
-    if a and (a.horizontal or a.vertical or a.wrap_text or a.shrink_to_fit
-              or (a.indent and a.indent != 0) or (a.text_rotation and a.text_rotation != 0)):
+    if a and (
+        a.horizontal
+        or a.vertical
+        or a.wrap_text
+        or a.shrink_to_fit
+        or (a.indent and a.indent != 0)
+        or (a.text_rotation and a.text_rotation != 0)
+    ):
         return True
 
     # Check fill
     fill = src_cell.fill
     if fill:
-        ft = getattr(fill, 'fill_type', None) or getattr(fill, 'patternType', None)
+        ft = getattr(fill, "fill_type", None) or getattr(fill, "patternType", None)
         if ft and ft != "none":
             return True
 
@@ -151,10 +161,7 @@ def _has_formatting(src_cell):
 
     # Check number format
     nf = src_cell.number_format
-    if nf and nf != "General":
-        return True
-
-    return False
+    return bool(nf and nf != "General")
 
 
 def _convert_openpyxl_to_rust(src_wb):
@@ -163,9 +170,9 @@ def _convert_openpyxl_to_rust(src_wb):
     Copies all cell values, formatting, merged cells, column widths,
     row heights, freeze panes, and other metadata.
     """
+    from openpyxl_rust.comments import Comment
     from openpyxl_rust.workbook import Workbook
     from openpyxl_rust.worksheet import Worksheet
-    from openpyxl_rust.comments import Comment
 
     wb = Workbook()
     wb._sheets = []
@@ -193,7 +200,7 @@ def _convert_openpyxl_to_rust(src_wb):
                 val = src_cell.value
                 if val is not None:
                     # Handle formula cells
-                    if src_cell.data_type == 'f' and isinstance(val, str) and val.startswith('='):
+                    if src_cell.data_type == "f" and isinstance(val, str) and val.startswith("="):
                         # Store as string for now (formulas not fully supported in our save)
                         ws.cell(row=r, column=c, value=val)
                     else:
@@ -288,7 +295,7 @@ def _convert_openpyxl_to_rust(src_wb):
         # --- Protection ---
         if src_ws.protection and src_ws.protection.sheet:
             ws.protection.sheet = True
-            ws.protection.password = getattr(src_ws.protection, 'password', None)
+            ws.protection.password = getattr(src_ws.protection, "password", None)
 
         wb._sheets.append(ws)
 

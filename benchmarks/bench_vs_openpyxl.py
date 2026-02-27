@@ -3,6 +3,7 @@
 Performance comparison: openpyxl_rust vs openpyxl.
 Runs identical operations with both libraries and prints a comparison table.
 """
+
 import os
 import tempfile
 import time
@@ -11,6 +12,7 @@ import time
 def bench_large_data_openpyxl(path, rows=100_000, cols=10):
     """100k rows x 10 cols of mixed types."""
     import openpyxl
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Data"
@@ -28,6 +30,7 @@ def bench_large_data_openpyxl(path, rows=100_000, cols=10):
 def bench_large_data_rust(path, rows=100_000, cols=10):
     """100k rows x 10 cols of mixed types."""
     from openpyxl_rust import Workbook
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Data"
@@ -46,6 +49,7 @@ def bench_formatted_openpyxl(path, rows=10_000):
     """10k rows with bold headers, number formats, column widths."""
     import openpyxl
     from openpyxl.styles import Font
+
     wb = openpyxl.Workbook()
     ws = wb.active
     headers = ["Name", "Revenue", "Cost", "Profit", "Margin"]
@@ -72,6 +76,7 @@ def bench_formatted_rust(path, rows=10_000):
     """10k rows with bold headers, number formats, column widths."""
     from openpyxl_rust import Workbook
     from openpyxl_rust.styles import Font
+
     wb = Workbook()
     ws = wb.active
     headers = ["Name", "Revenue", "Cost", "Profit", "Margin"]
@@ -97,6 +102,7 @@ def bench_formatted_rust(path, rows=10_000):
 def bench_batch_data_rust(path, rows=100_000, cols=10):
     """100k rows x 10 cols using batch append_rows API."""
     from openpyxl_rust import Workbook
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Data"
@@ -122,6 +128,7 @@ def bench_batch_data_rust(path, rows=100_000, cols=10):
 def bench_multisheet_openpyxl(path, sheets=5, rows=20_000):
     """5 sheets x 20k rows each."""
     import openpyxl
+
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
     for s in range(sheets):
@@ -136,6 +143,7 @@ def bench_multisheet_openpyxl(path, sheets=5, rows=20_000):
 def bench_multisheet_rust(path, sheets=5, rows=20_000):
     """5 sheets x 20k rows each."""
     from openpyxl_rust import Workbook
+
     wb = Workbook()
     # Rename default sheet as first sheet
     ws = wb.active
@@ -211,17 +219,13 @@ def main():
     print(f"{'Benchmark':<35} {'openpyxl':>10} {'ours':>10} {'speedup':>10}")
     print("-" * 67)
     for r in results:
-        print(
-            f"{r['name']:<35} {r['openpyxl_time']:>9.2f}s {r['rust_time']:>9.2f}s {r['speedup']:>9.1f}x"
-        )
+        print(f"{r['name']:<35} {r['openpyxl_time']:>9.2f}s {r['rust_time']:>9.2f}s {r['speedup']:>9.1f}x")
 
     print()
     print(f"{'Benchmark':<35} {'openpyxl':>12} {'ours':>12}")
     print("-" * 61)
     for r in results:
-        print(
-            f"{r['name']:<35} {r['openpyxl_size']/1024:>10.1f} KB {r['rust_size']/1024:>10.1f} KB"
-        )
+        print(f"{r['name']:<35} {r['openpyxl_size'] / 1024:>10.1f} KB {r['rust_size'] / 1024:>10.1f} KB")
 
     print()
     avg_speedup = sum(r["speedup"] for r in results) / len(results)

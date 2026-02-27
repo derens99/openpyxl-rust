@@ -1,9 +1,10 @@
 # tests/test_datetime.py
 import os
 import tempfile
-from datetime import datetime, date
+from datetime import date, datetime
 
 import openpyxl as real_openpyxl
+
 from openpyxl_rust import Workbook
 
 

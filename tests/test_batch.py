@@ -3,6 +3,7 @@ import os
 import tempfile
 
 import openpyxl
+
 from openpyxl_rust import Workbook
 
 
@@ -51,11 +52,13 @@ def test_append_rows_saves_correctly():
     wb = Workbook()
     ws = wb.active
     ws.title = "Data"
-    ws.append_rows([
-        [1, "hello", True],
-        [2, "world", False],
-        [3.14, "pi", None],
-    ])
+    ws.append_rows(
+        [
+            [1, "hello", True],
+            [2, "world", False],
+            [3.14, "pi", None],
+        ]
+    )
 
     with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
         path = f.name
@@ -85,9 +88,11 @@ def test_append_mixed_types():
     """Strings, numbers, booleans, None, and formulas in batch."""
     wb = Workbook()
     ws = wb.active
-    ws.append_rows([
-        ["text", 42, 3.14, True, False, None, "=SUM(B1:C1)"],
-    ])
+    ws.append_rows(
+        [
+            ["text", 42, 3.14, True, False, None, "=SUM(B1:C1)"],
+        ]
+    )
 
     assert ws.cell(row=1, column=1).value == "text"
     assert ws.cell(row=1, column=2).value == 42
@@ -153,11 +158,13 @@ def test_append_rows_batch_saves_with_formulas():
     """Formulas via batch append should survive save/load roundtrip."""
     wb = Workbook()
     ws = wb.active
-    ws.append_rows([
-        [10, 20],
-        [30, 40],
-        ["=SUM(A1:A2)", "=SUM(B1:B2)"],
-    ])
+    ws.append_rows(
+        [
+            [10, 20],
+            [30, 40],
+            ["=SUM(A1:A2)", "=SUM(B1:B2)"],
+        ]
+    )
 
     with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
         path = f.name

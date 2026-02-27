@@ -1,14 +1,17 @@
+# --- Build system ---
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
+# --- Project metadata ---
 [project]
 name = "openpyxl_rust"
-requires-python = ">=3.9"
-version = "0.5.0"
+dynamic = ["version"]
 description = "Fast, Rust-backed openpyxl-compatible Excel writer"
 license = "MIT"
 readme = "README.md"
+requires-python = ">=3.9"
+keywords = ["excel", "xlsx", "openpyxl", "rust", "spreadsheet"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
@@ -16,9 +19,103 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Topic :: Office/Business :: Financial :: Spreadsheet",
 ]
-keywords = ["excel", "xlsx", "openpyxl", "rust", "spreadsheet"]
 
+# --- Project URLs ---
+[project.urls]
+Homepage = "https://github.com/derens99/openpyxl-rust"
+Repository = "https://github.com/derens99/openpyxl-rust"
+Documentation = "https://github.com/derens99/openpyxl-rust#readme"
+
+# --- Dev dependency groups ---
+[dependency-groups]
+dev = [
+    "maturin>=1.0",
+    "openpyxl>=3.1",
+    "pytest>=8.0",
+    "python-semantic-release>=10.0.0",
+    "ruff>=0.15.0",
+]
+
+# --- Maturin: build config ---
 [tool.maturin]
 features = ["pyo3/extension-module"]
 python-source = "python"
 module-name = "openpyxl_rust._openpyxl_rust"
+
+# --- Ruff: lint & format ---
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+src = ["python", "tests", "benchmarks"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific rules
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "SIM108", # ternary operator (can reduce readability)
+    "B010",   # setattr with constant (used in style classes)
+    "UP007",  # X | Y union syntax (need 3.9 compat)
+    "UP045",  # X | None syntax (need 3.9 compat)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["openpyxl_rust"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# --- Pytest ---
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+
+# --- Semantic release (conventional commits → semver) ---
+[tool.semantic_release]
+version_toml = ["Cargo.toml:package.version"]
+commit_parser = "conventional"
+tag_format = "v{version}"
+
+# More specific patterns first. main = full release, dev = rc, feat/* = alpha.
+[tool.semantic_release.branches.alpha]
+match = "feat/.+"
+prerelease = true
+prerelease_token = "alpha"
+
+[tool.semantic_release.branches.rc]
+match = "dev"
+prerelease = true
+prerelease_token = "rc"
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.commit_parser_options]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+parse_squash_commits = true
+ignore_merge_commits = true
+
+[tool.semantic_release.changelog]
+exclude_commit_patterns = [
+    "chore(?:\\([^)]*?\\))?: .+",
+    "ci(?:\\([^)]*?\\))?: .+",
+    "refactor(?:\\([^)]*?\\))?: .+",
+    "style(?:\\([^)]*?\\))?: .+",
+    "test(?:\\([^)]*?\\))?: .+",
+    "build(?:\\([^)]*?\\))?: .+",
+    "Initial [Cc]ommit.*",
+]
+
+[tool.semantic_release.remote]
+token = { env = "GH_TOKEN" }

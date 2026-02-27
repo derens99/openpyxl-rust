@@ -1,10 +1,24 @@
 class SheetProtection:
-    def __init__(self, sheet=False, password=None, format_cells=True, format_rows=True,
-                 format_columns=True, insert_columns=True, insert_rows=True,
-                 insert_hyperlinks=True, delete_columns=True, delete_rows=True,
-                 select_locked_cells=False, select_unlocked_cells=False,
-                 sort=True, autofilter=True, pivot_tables=True,
-                 objects=False, scenarios=False):
+    def __init__(
+        self,
+        sheet=False,
+        password=None,
+        format_cells=True,
+        format_rows=True,
+        format_columns=True,
+        insert_columns=True,
+        insert_rows=True,
+        insert_hyperlinks=True,
+        delete_columns=True,
+        delete_rows=True,
+        select_locked_cells=False,
+        select_unlocked_cells=False,
+        sort=True,
+        autofilter=True,
+        pivot_tables=True,
+        objects=False,
+        scenarios=False,
+    ):
         self.sheet = sheet
         self._password = password
         self.format_cells = format_cells

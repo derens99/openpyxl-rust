@@ -1,4 +1,4 @@
-from datetime import datetime, date, time
+from datetime import date, datetime, time
 
 
 def _col_letter(col_idx):
@@ -30,24 +30,47 @@ def _date_to_excel_serial(year, month, day):
 # ---------- encoding maps for Rust FFI ----------
 
 _BORDER_STYLE_MAP = {
-    "thin": 1, "medium": 2, "thick": 3, "dashed": 4, "dotted": 5,
-    "double": 6, "hair": 7, "mediumDashed": 8, "dashDot": 9,
-    "mediumDashDot": 10, "dashDotDot": 11, "mediumDashDotDot": 12,
+    "thin": 1,
+    "medium": 2,
+    "thick": 3,
+    "dashed": 4,
+    "dotted": 5,
+    "double": 6,
+    "hair": 7,
+    "mediumDashed": 8,
+    "dashDot": 9,
+    "mediumDashDot": 10,
+    "dashDotDot": 11,
+    "mediumDashDotDot": 12,
     "slantDashDot": 13,
 }
 
 _FILL_TYPE_MAP = {
-    "solid": 1, "darkGray": 2, "mediumGray": 3, "lightGray": 4,
-    "gray125": 5, "gray0625": 6,
+    "solid": 1,
+    "darkGray": 2,
+    "mediumGray": 3,
+    "lightGray": 4,
+    "gray125": 5,
+    "gray0625": 6,
 }
 
 _HALIGN_MAP = {
-    "left": 1, "center": 2, "right": 3, "fill": 4, "justify": 5,
-    "centerContinuous": 6, "center_continuous": 6, "distributed": 7,
+    "left": 1,
+    "center": 2,
+    "right": 3,
+    "fill": 4,
+    "justify": 5,
+    "centerContinuous": 6,
+    "center_continuous": 6,
+    "distributed": 7,
 }
 
 _VALIGN_MAP = {
-    "top": 1, "center": 2, "bottom": 3, "justify": 4, "distributed": 5,
+    "top": 1,
+    "center": 2,
+    "bottom": 3,
+    "justify": 4,
+    "distributed": 5,
 }
 
 
@@ -77,18 +100,28 @@ def _vert_align_to_u8(val):
 
 
 class Cell:
-    __slots__ = ('_ws', '_row', '_col', '_value',
-                 '_font', '_number_format', '_alignment',
-                 '_border', '_fill', '_hyperlink', '_comment')
+    __slots__ = (
+        "_alignment",
+        "_border",
+        "_col",
+        "_comment",
+        "_fill",
+        "_font",
+        "_hyperlink",
+        "_number_format",
+        "_row",
+        "_value",
+        "_ws",
+    )
 
-    TYPE_STRING = 's'
-    TYPE_FORMULA = 'f'
-    TYPE_NUMERIC = 'n'
-    TYPE_BOOL = 'b'
-    TYPE_NULL = 'n'
-    TYPE_INLINE = 's'
-    TYPE_ERROR = 'e'
-    TYPE_FORMULA_CACHE_STRING = 's'
+    TYPE_STRING = "s"
+    TYPE_FORMULA = "f"
+    TYPE_NUMERIC = "n"
+    TYPE_BOOL = "b"
+    TYPE_NULL = "n"
+    TYPE_INLINE = "s"
+    TYPE_ERROR = "e"
+    TYPE_FORMULA_CACHE_STRING = "s"
 
     def __init__(self, row=1, column=1, value=None, worksheet=None):
         self._ws = worksheet
@@ -145,18 +178,18 @@ class Cell:
     def data_type(self):
         v = self.value
         if v is None:
-            return 'n'
+            return "n"
         if isinstance(v, bool):
-            return 'b'
+            return "b"
         if isinstance(v, (int, float)):
-            return 'n'
+            return "n"
         if isinstance(v, (datetime, date, time)):
-            return 'd'
+            return "d"
         if isinstance(v, str):
-            if v.startswith('='):
-                return 'f'
-            return 's'
-        return 'n'
+            if v.startswith("="):
+                return "f"
+            return "s"
+        return "n"
 
     @property
     def font(self):

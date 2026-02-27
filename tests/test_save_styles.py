@@ -1,8 +1,9 @@
 # tests/test_save_styles.py
 import os
 import tempfile
+
 from openpyxl_rust import Workbook
-from openpyxl_rust.styles import Font, Alignment, Border, Side, PatternFill
+from openpyxl_rust.styles import Alignment, Border, Font, PatternFill, Side
 
 
 def _save_and_check(setup_fn):
@@ -24,6 +25,7 @@ def test_save_alignment():
         ws = wb.active
         ws["A1"] = "Centered"
         ws["A1"].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
     path = _save_and_check(setup)
     os.unlink(path)
 
@@ -38,6 +40,7 @@ def test_save_border():
             top=Side(style="thin", color="000000"),
             bottom=Side(style="thin", color="000000"),
         )
+
     path = _save_and_check(setup)
     os.unlink(path)
 
@@ -47,6 +50,7 @@ def test_save_fill():
         ws = wb.active
         ws["A1"] = "Yellow"
         ws["A1"].fill = PatternFill(fill_type="solid", start_color="FFFF00")
+
     path = _save_and_check(setup)
     os.unlink(path)
 
@@ -60,12 +64,14 @@ def test_save_all_styles_combined():
         ws["A1"].border = Border(left=Side(style="thick", color="FF0000"))
         ws["A1"].fill = PatternFill(fill_type="solid", start_color="00FF00")
         ws["A1"].number_format = "#,##0.00"
+
     path = _save_and_check(setup)
     os.unlink(path)
 
 
 def test_compat_alignment():
     import openpyxl as real_openpyxl
+
     wb = Workbook()
     ws = wb.active
     ws["A1"] = "Centered"
@@ -85,6 +91,7 @@ def test_compat_alignment():
 
 def test_compat_border():
     import openpyxl as real_openpyxl
+
     wb = Workbook()
     ws = wb.active
     ws["A1"] = "Bordered"
@@ -108,6 +115,7 @@ def test_compat_border():
 
 def test_compat_fill():
     import openpyxl as real_openpyxl
+
     wb = Workbook()
     ws = wb.active
     ws["A1"] = "Yellow"
@@ -126,6 +134,7 @@ def test_compat_fill():
 
 def test_compat_font_strikethrough():
     import openpyxl as real_openpyxl
+
     wb = Workbook()
     ws = wb.active
     ws["A1"] = "Strike"
@@ -142,6 +151,7 @@ def test_compat_font_strikethrough():
 
 def test_compat_font_superscript():
     import openpyxl as real_openpyxl
+
     wb = Workbook()
     ws = wb.active
     ws["A1"] = "Super"
@@ -158,13 +168,11 @@ def test_compat_font_superscript():
 
 def test_compat_border_diagonal():
     import openpyxl as real_openpyxl
+
     wb = Workbook()
     ws = wb.active
     ws["A1"] = "Diag"
-    ws["A1"].border = Border(
-        diagonal=Side(style="thin"),
-        diagonalUp=True
-    )
+    ws["A1"].border = Border(diagonal=Side(style="thin"), diagonalUp=True)
     with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
         path = f.name
     try:
@@ -178,9 +186,12 @@ def test_compat_border_diagonal():
 
 def test_batch_format_many_cells():
     """Verify batch format flush works with many formatted cells."""
-    import os, tempfile
+    import os
+    import tempfile
+
     from openpyxl_rust import Workbook
     from openpyxl_rust.styles import Font
+
     wb = Workbook()
     ws = wb.active
     bold = Font(bold=True)
@@ -193,6 +204,7 @@ def test_batch_format_many_cells():
         wb.save(path)
         assert os.path.getsize(path) > 0
         import openpyxl
+
         rb = openpyxl.load_workbook(path)
         assert rb.active.cell(row=1, column=1).font.bold is True
         assert rb.active.cell(row=100, column=1).font.bold is True

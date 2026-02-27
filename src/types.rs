@@ -6,28 +6,28 @@ pub(crate) enum CellData {
     Number(f64),
     Boolean(bool),
     Formula(String),
-    DateTime(f64, u8),  // (serial, kind: 0=date, 1=time, 2=datetime)
+    DateTime(f64, u8), // (serial, kind: 0=date, 1=time, 2=datetime)
     Empty,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct CellFormat {
     pub(crate) font_bold: bool,
     pub(crate) font_italic: bool,
     pub(crate) font_name: Option<String>,
     pub(crate) font_size: Option<f64>,
     pub(crate) font_color: Option<String>,
-    pub(crate) font_underline: Option<u8>,    // 0=none, 1=single, 2=double
+    pub(crate) font_underline: Option<u8>, // 0=none, 1=single, 2=double
     pub(crate) font_strikethrough: bool,
-    pub(crate) font_vert_align: Option<u8>,   // 1=superscript, 2=subscript
+    pub(crate) font_vert_align: Option<u8>, // 1=superscript, 2=subscript
     pub(crate) number_format: Option<String>,
-    pub(crate) align_horizontal: Option<u8>,  // 1=left,2=center,3=right,4=fill,5=justify,6=centerAcross,7=distributed
-    pub(crate) align_vertical: Option<u8>,    // 1=top,2=center,3=bottom,4=justify,5=distributed
+    pub(crate) align_horizontal: Option<u8>, // 1=left,2=center,3=right,4=fill,5=justify,6=centerAcross,7=distributed
+    pub(crate) align_vertical: Option<u8>,   // 1=top,2=center,3=bottom,4=justify,5=distributed
     pub(crate) align_wrap_text: bool,
     pub(crate) align_shrink_to_fit: bool,
     pub(crate) align_indent: u8,
     pub(crate) align_text_rotation: i16,
-    pub(crate) fill_type: Option<u8>,         // 1=solid,2=darkGray,3=mediumGray,4=lightGray,5=gray125,6=gray0625
+    pub(crate) fill_type: Option<u8>, // 1=solid,2=darkGray,3=mediumGray,4=lightGray,5=gray125,6=gray0625
     pub(crate) fill_start_color: Option<String>,
     pub(crate) fill_end_color: Option<String>,
     pub(crate) border_left_style: Option<u8>,
@@ -44,43 +44,6 @@ pub(crate) struct CellFormat {
     pub(crate) border_diagonal_down: bool,
 }
 
-impl Default for CellFormat {
-    fn default() -> Self {
-        CellFormat {
-            font_bold: false,
-            font_italic: false,
-            font_name: None,
-            font_size: None,
-            font_color: None,
-            font_underline: None,
-            font_strikethrough: false,
-            font_vert_align: None,
-            number_format: None,
-            align_horizontal: None,
-            align_vertical: None,
-            align_wrap_text: false,
-            align_shrink_to_fit: false,
-            align_indent: 0,
-            align_text_rotation: 0,
-            fill_type: None,
-            fill_start_color: None,
-            fill_end_color: None,
-            border_left_style: None,
-            border_left_color: None,
-            border_right_style: None,
-            border_right_color: None,
-            border_top_style: None,
-            border_top_color: None,
-            border_bottom_style: None,
-            border_bottom_color: None,
-            border_diagonal_style: None,
-            border_diagonal_color: None,
-            border_diagonal_up: false,
-            border_diagonal_down: false,
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 pub(crate) struct CellValue {
     pub(crate) value: CellData,
@@ -90,17 +53,19 @@ pub(crate) struct CellValue {
 #[derive(Clone, Debug)]
 pub(crate) struct SheetData {
     pub(crate) title: String,
-    pub(crate) cells: HashMap<(u32, u16), CellValue>,        // (row, col) -> CellValue (0-based)
-    pub(crate) column_widths: HashMap<u16, f64>,               // col (0-based) -> width
-    pub(crate) row_heights: HashMap<u32, f64>,                 // row (0-based) -> height
-    pub(crate) freeze_panes: Option<(u32, u16)>,               // (row, col) 0-based
-    pub(crate) merged_ranges: Vec<(u32, u16, u32, u16)>,       // (r1, c1, r2, c2) 0-based
+    pub(crate) cells: HashMap<(u32, u16), CellValue>, // (row, col) -> CellValue (0-based)
+    pub(crate) column_widths: HashMap<u16, f64>,      // col (0-based) -> width
+    pub(crate) row_heights: HashMap<u32, f64>,        // row (0-based) -> height
+    pub(crate) freeze_panes: Option<(u32, u16)>,      // (row, col) 0-based
+    pub(crate) merged_ranges: Vec<(u32, u16, u32, u16)>, // (r1, c1, r2, c2) 0-based
+    #[allow(clippy::type_complexity)]
     pub(crate) hyperlinks: Vec<(u32, u16, String, Option<String>, Option<String>)>, // (row, col, url, text, tooltip)
-    pub(crate) notes: Vec<(u32, u16, String, Option<String>)>,                     // (row, col, text, author)
-    pub(crate) autofilter: Option<(u32, u16, u32, u16)>,                          // (r1, c1, r2, c2) 0-based
+    pub(crate) notes: Vec<(u32, u16, String, Option<String>)>, // (row, col, text, author)
+    pub(crate) autofilter: Option<(u32, u16, u32, u16)>,       // (r1, c1, r2, c2) 0-based
     pub(crate) protection_json: Option<String>,
     pub(crate) page_setup_json: Option<String>,
-    pub(crate) images: Vec<(u32, u16, Vec<u8>, Option<f64>, Option<f64>)>,  // (row, col, image_data, scale_width, scale_height)
+    #[allow(clippy::type_complexity)]
+    pub(crate) images: Vec<(u32, u16, Vec<u8>, Option<f64>, Option<f64>)>, // (row, col, image_data, scale_width, scale_height)
     pub(crate) data_validations: Vec<String>,
     pub(crate) conditional_formats: Vec<String>,
     pub(crate) tables: Vec<String>,
@@ -148,10 +113,18 @@ impl SheetData {
                 self.max_col = Some(col);
             }
             Some(mn) => {
-                if row < mn { self.min_row = Some(row); }
-                if row > self.max_row.unwrap() { self.max_row = Some(row); }
-                if col < self.min_col.unwrap() { self.min_col = Some(col); }
-                if col > self.max_col.unwrap() { self.max_col = Some(col); }
+                if row < mn {
+                    self.min_row = Some(row);
+                }
+                if row > self.max_row.unwrap() {
+                    self.max_row = Some(row);
+                }
+                if col < self.min_col.unwrap() {
+                    self.min_col = Some(col);
+                }
+                if col > self.max_col.unwrap() {
+                    self.max_col = Some(col);
+                }
             }
         }
     }
@@ -163,13 +136,23 @@ impl SheetData {
             self.min_col = None;
             self.max_col = None;
         } else {
-            let mut mn_r = u32::MAX; let mut mx_r = 0u32;
-            let mut mn_c = u16::MAX; let mut mx_c = 0u16;
+            let mut mn_r = u32::MAX;
+            let mut mx_r = 0u32;
+            let mut mn_c = u16::MAX;
+            let mut mx_c = 0u16;
             for &(r, c) in self.cells.keys() {
-                if r < mn_r { mn_r = r; }
-                if r > mx_r { mx_r = r; }
-                if c < mn_c { mn_c = c; }
-                if c > mx_c { mx_c = c; }
+                if r < mn_r {
+                    mn_r = r;
+                }
+                if r > mx_r {
+                    mx_r = r;
+                }
+                if c < mn_c {
+                    mn_c = c;
+                }
+                if c > mx_c {
+                    mx_c = c;
+                }
             }
             self.min_row = Some(mn_r);
             self.max_row = Some(mx_r);

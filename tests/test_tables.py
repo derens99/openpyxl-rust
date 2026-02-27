@@ -1,9 +1,8 @@
 """Tests for Table support."""
-import os
-import tempfile
-import pytest
+
 import openpyxl
-from openpyxl_rust import Workbook, Table, TableStyleInfo, TableColumn
+
+from openpyxl_rust import Table, TableColumn, TableStyleInfo, Workbook
 
 
 class TestTableCreation:
@@ -28,7 +27,7 @@ class TestTableCreation:
         wb2 = openpyxl.load_workbook(path)
         ws2 = wb2.active
         assert len(ws2.tables) == 1
-        t = list(ws2.tables.values())[0]
+        t = next(iter(ws2.tables.values()))
         assert t.displayName == "People"
         assert t.ref == "A1:C4"
 
@@ -49,7 +48,7 @@ class TestTableCreation:
 
         wb2 = openpyxl.load_workbook(path)
         ws2 = wb2.active
-        t = list(ws2.tables.values())[0]
+        t = next(iter(ws2.tables.values()))
         assert t.displayName == "Products"
         assert t.tableStyleInfo.name == "TableStyleLight1"
 
@@ -68,7 +67,7 @@ class TestTableCreation:
         wb.save(path)
 
         wb2 = openpyxl.load_workbook(path)
-        t = list(wb2.active.tables.values())[0]
+        t = next(iter(wb2.active.tables.values()))
         assert t.tableStyleInfo.name == "TableStyleDark3"
 
     def test_table_with_columns(self, tmp_path):
@@ -92,7 +91,7 @@ class TestTableCreation:
         wb.save(path)
 
         wb2 = openpyxl.load_workbook(path)
-        t = list(wb2.active.tables.values())[0]
+        t = next(iter(wb2.active.tables.values()))
         assert t.displayName == "WithCols"
         cols = t.tableColumns
         assert len(cols) == 3
@@ -121,7 +120,7 @@ class TestTableCreation:
         wb.save(path)
 
         wb2 = openpyxl.load_workbook(path)
-        t = list(wb2.active.tables.values())[0]
+        t = next(iter(wb2.active.tables.values()))
         si = t.tableStyleInfo
         assert si.showRowStripes is True
         assert si.showColumnStripes is True
@@ -174,5 +173,5 @@ class TestTableCreation:
         wb.save(path)
 
         wb2 = openpyxl.load_workbook(path)
-        t = list(wb2.active.tables.values())[0]
+        t = next(iter(wb2.active.tables.values()))
         assert t.displayName == "NoStyle"

@@ -4,7 +4,7 @@ import tempfile
 
 import openpyxl as real_openpyxl
 
-from openpyxl_rust import Workbook, Comment
+from openpyxl_rust import Comment, Workbook
 
 
 def test_comment_basic():
