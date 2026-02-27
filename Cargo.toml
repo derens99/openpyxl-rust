@@ -1,6 +1,6 @@
 [package]
 name = "openpyxl-rust"
-version = "1.0.0-rc.2"
+version = "1.0.1-rc.1"
 edition = "2021"
 
 [lib]
