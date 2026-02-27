@@ -40,20 +40,17 @@ jobs:
         run: |
           BRANCH="${{ github.ref_name }}"
 
-          # Capture the current latest tag before release
-          BEFORE=$(git tag --sort=-v:refname | head -1)
-
           if [[ "$BRANCH" == feat/* ]]; then
             uv run semantic-release version --push --vcs-release --build-metadata "${BRANCH//\//-}"
           else
             uv run semantic-release version --push --vcs-release
           fi
 
-          # Check if a new tag was created
-          AFTER=$(git tag --sort=-v:refname | head -1)
-          if [[ "$BEFORE" != "$AFTER" && -n "$AFTER" ]]; then
+          # Check if semantic-release tagged HEAD (= a release happened)
+          TAG=$(git tag --points-at HEAD --sort=-v:refname | grep '^v' | head -1)
+          if [[ -n "$TAG" ]]; then
             echo "released=true" >> "$GITHUB_OUTPUT"
-            echo "tag=$AFTER" >> "$GITHUB_OUTPUT"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           else
             echo "released=false" >> "$GITHUB_OUTPUT"
             echo "tag=" >> "$GITHUB_OUTPUT"
