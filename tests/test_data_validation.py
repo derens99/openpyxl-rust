@@ -1,10 +1,6 @@
-import os
-import tempfile
-
-import pytest
 import openpyxl
 
-from openpyxl_rust import Workbook, DataValidation
+from openpyxl_rust import DataValidation, Workbook
 
 
 def test_dropdown_list(tmp_path):
@@ -113,7 +109,10 @@ def test_error_messages(tmp_path):
     ws["A1"] = "Enter value:"
 
     dv = DataValidation(
-        type="whole", operator="between", formula1="1", formula2="100",
+        type="whole",
+        operator="between",
+        formula1="1",
+        formula2="100",
         showErrorMessage=True,
         errorTitle="Bad Value",
         error="Please enter 1-100",
@@ -142,7 +141,10 @@ def test_input_messages(tmp_path):
     ws["A1"] = "Enter value:"
 
     dv = DataValidation(
-        type="whole", operator="between", formula1="1", formula2="10",
+        type="whole",
+        operator="between",
+        formula1="1",
+        formula2="10",
         showInputMessage=True,
         promptTitle="Rating",
         prompt="Enter a rating 1-10",

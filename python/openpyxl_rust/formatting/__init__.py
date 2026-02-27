@@ -1,5 +1,3 @@
-from openpyxl_rust.formatting.rule import (
-    ColorScaleRule, DataBarRule, IconSetRule, CellIsRule, FormulaRule
-)
+from openpyxl_rust.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule, FormulaRule, IconSetRule
 
-__all__ = ["ColorScaleRule", "DataBarRule", "IconSetRule", "CellIsRule", "FormulaRule"]
+__all__ = ["CellIsRule", "ColorScaleRule", "DataBarRule", "FormulaRule", "IconSetRule"]

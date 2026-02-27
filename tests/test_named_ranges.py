@@ -4,7 +4,7 @@ import tempfile
 
 import openpyxl as real_openpyxl
 
-from openpyxl_rust import Workbook, DefinedName
+from openpyxl_rust import DefinedName, Workbook
 
 
 def test_define_name_basic():

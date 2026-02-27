@@ -1,21 +1,29 @@
-from openpyxl_rust.workbook import Workbook, DefinedName
-from openpyxl_rust.worksheet import Worksheet
 from openpyxl_rust.cell import Cell
-from openpyxl_rust.comments import Comment
-from openpyxl_rust.protection import SheetProtection
-from openpyxl_rust.page import PrintPageSetup, PageMargins, PrintOptions
-from openpyxl_rust.image import Image
-from openpyxl_rust.datavalidation import DataValidation
-from openpyxl_rust.table import Table, TableStyleInfo, TableColumn
 from openpyxl_rust.chart import (
-    Reference, Series,
-    BarChart, BarChart3D, LineChart, LineChart3D,
-    PieChart, PieChart3D, AreaChart, AreaChart3D,
-    ScatterChart, DoughnutChart, RadarChart, StockChart,
+    AreaChart,
+    AreaChart3D,
+    BarChart,
+    BarChart3D,
+    DoughnutChart,
+    LineChart,
+    LineChart3D,
+    PieChart,
+    PieChart3D,
+    RadarChart,
+    Reference,
+    ScatterChart,
+    Series,
+    StockChart,
 )
-from openpyxl_rust.formatting.rule import (
-    ColorScaleRule, DataBarRule, IconSetRule, CellIsRule, FormulaRule
-)
+from openpyxl_rust.comments import Comment
+from openpyxl_rust.datavalidation import DataValidation
+from openpyxl_rust.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule, FormulaRule, IconSetRule
+from openpyxl_rust.image import Image
+from openpyxl_rust.page import PageMargins, PrintOptions, PrintPageSetup
+from openpyxl_rust.protection import SheetProtection
+from openpyxl_rust.table import Table, TableColumn, TableStyleInfo
+from openpyxl_rust.workbook import DefinedName, Workbook
+from openpyxl_rust.worksheet import Worksheet
 
 
 def load_workbook(filename, data_only=True):
@@ -30,25 +38,24 @@ def load_workbook(filename, data_only=True):
     """
     if not data_only:
         import openpyxl as _openpyxl
+
         from openpyxl_rust.loader import _convert_openpyxl_to_rust
+
         src = _openpyxl.load_workbook(filename, data_only=False)
         return _convert_openpyxl_to_rust(src)
-    from openpyxl_rust._openpyxl_rust import _load_workbook, _load_workbook_bytes
-    from datetime import datetime
     import os
+    from datetime import datetime
+
+    from openpyxl_rust._openpyxl_rust import _load_workbook, _load_workbook_bytes
 
     # File-like object (BytesIO, open file handle, etc.)
-    if hasattr(filename, 'read'):
+    if hasattr(filename, "read"):
         try:
             raw = filename.read()
         except (UnicodeDecodeError, ValueError) as exc:
-            raise TypeError(
-                "File-like object must be opened in binary mode (read() must return bytes)"
-            ) from exc
+            raise TypeError("File-like object must be opened in binary mode (read() must return bytes)") from exc
         if not isinstance(raw, bytes):
-            raise TypeError(
-                "File-like object must be opened in binary mode (read() must return bytes)"
-            )
+            raise TypeError("File-like object must be opened in binary mode (read() must return bytes)")
         data = _load_workbook_bytes(raw)
     # Path-like object (str, pathlib.Path, os.PathLike)
     elif isinstance(filename, (str, os.PathLike)):
@@ -79,8 +86,7 @@ def load_workbook(filename, data_only=True):
                 if value is not None:
                     # Parse datetime strings from calamine back to Python datetime
                     if isinstance(value, str):
-                        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S",
-                                    "%Y-%m-%d"):
+                        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
                             try:
                                 value = datetime.strptime(value, fmt)
                                 if fmt == "%Y-%m-%d":
@@ -94,12 +100,39 @@ def load_workbook(filename, data_only=True):
     return wb
 
 
-__all__ = ["Workbook", "Worksheet", "Cell", "Comment", "SheetProtection",
-           "PrintPageSetup", "PageMargins", "PrintOptions", "DefinedName",
-           "Image", "DataValidation", "load_workbook",
-           "Table", "TableStyleInfo", "TableColumn",
-           "Reference", "Series",
-           "BarChart", "BarChart3D", "LineChart", "LineChart3D",
-           "PieChart", "PieChart3D", "AreaChart", "AreaChart3D",
-           "ScatterChart", "DoughnutChart", "RadarChart", "StockChart",
-           "ColorScaleRule", "DataBarRule", "IconSetRule", "CellIsRule", "FormulaRule"]
+__all__ = [
+    "AreaChart",
+    "AreaChart3D",
+    "BarChart",
+    "BarChart3D",
+    "Cell",
+    "CellIsRule",
+    "ColorScaleRule",
+    "Comment",
+    "DataBarRule",
+    "DataValidation",
+    "DefinedName",
+    "DoughnutChart",
+    "FormulaRule",
+    "IconSetRule",
+    "Image",
+    "LineChart",
+    "LineChart3D",
+    "PageMargins",
+    "PieChart",
+    "PieChart3D",
+    "PrintOptions",
+    "PrintPageSetup",
+    "RadarChart",
+    "Reference",
+    "ScatterChart",
+    "Series",
+    "SheetProtection",
+    "StockChart",
+    "Table",
+    "TableColumn",
+    "TableStyleInfo",
+    "Workbook",
+    "Worksheet",
+    "load_workbook",
+]

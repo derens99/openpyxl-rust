@@ -1,5 +1,5 @@
-from openpyxl_rust.worksheet import Worksheet
 from openpyxl_rust.styles import Font
+from openpyxl_rust.worksheet import Worksheet
 
 
 def test_worksheet_title():

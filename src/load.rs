@@ -1,6 +1,6 @@
+use calamine::{open_workbook, Data, Reader, Xlsx};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
-use calamine::{open_workbook, Reader, Xlsx, Data};
 use std::io::Cursor;
 
 /// Shared logic: convert a calamine Xlsx reader into a Python dict of sheet data.
@@ -11,15 +11,21 @@ fn _convert_workbook_to_py<R: std::io::Read + std::io::Seek>(
     let sheet_names: Vec<String> = workbook.sheet_names().to_vec();
 
     let result = PyDict::new(py);
-    let names_vec: Vec<PyObject> = sheet_names.iter().map(|s: &String| s.as_str().into_pyobject(py).unwrap().into_any().unbind()).collect();
+    let names_vec: Vec<PyObject> = sheet_names
+        .iter()
+        .map(|s: &String| s.as_str().into_pyobject(py).unwrap().into_any().unbind())
+        .collect();
     let names_list = PyList::new(py, &names_vec)?;
     result.set_item("sheet_names", names_list)?;
 
     let sheets_dict = PyDict::new(py);
 
     for name in &sheet_names {
-        let range = workbook.worksheet_range(name)
-            .map_err(|e: calamine::XlsxError| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        let range = workbook
+            .worksheet_range(name)
+            .map_err(|e: calamine::XlsxError| {
+                pyo3::exceptions::PyRuntimeError::new_err(e.to_string())
+            })?;
 
         let (num_rows, num_cols) = range.get_size();
         let empty_vec: Vec<PyObject> = Vec::new();
@@ -30,7 +36,9 @@ fn _convert_workbook_to_py<R: std::io::Read + std::io::Seek>(
             for c in 0..num_cols {
                 let cell = range.get((r, c));
                 let py_val: PyObject = match cell {
-                    Some(Data::String(s)) => s.as_str().into_pyobject(py).unwrap().into_any().unbind(),
+                    Some(Data::String(s)) => {
+                        s.as_str().into_pyobject(py).unwrap().into_any().unbind()
+                    }
                     Some(Data::Float(f)) => {
                         let fv = *f;
                         if fv == (fv as i64) as f64 && fv.is_finite() {
@@ -49,9 +57,17 @@ fn _convert_workbook_to_py<R: std::io::Read + std::io::Seek>(
                         let s = dt.to_string();
                         s.into_pyobject(py).unwrap().into_any().unbind()
                     }
-                    Some(Data::DateTimeIso(s)) => s.as_str().into_pyobject(py).unwrap().into_any().unbind(),
-                    Some(Data::DurationIso(s)) => s.as_str().into_pyobject(py).unwrap().into_any().unbind(),
-                    Some(Data::Error(e)) => format!("#ERROR: {:?}", e).into_pyobject(py).unwrap().into_any().unbind(),
+                    Some(Data::DateTimeIso(s)) => {
+                        s.as_str().into_pyobject(py).unwrap().into_any().unbind()
+                    }
+                    Some(Data::DurationIso(s)) => {
+                        s.as_str().into_pyobject(py).unwrap().into_any().unbind()
+                    }
+                    Some(Data::Error(e)) => format!("#ERROR: {:?}", e)
+                        .into_pyobject(py)
+                        .unwrap()
+                        .into_any()
+                        .unbind(),
                     Some(Data::Empty) | None => py.None(),
                 };
                 row_list.append(py_val)?;

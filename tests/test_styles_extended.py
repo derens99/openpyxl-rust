@@ -1,4 +1,4 @@
-from openpyxl_rust.styles import Alignment, Border, Side, PatternFill
+from openpyxl_rust.styles import Alignment, Border, PatternFill, Side
 
 
 def test_alignment_defaults():

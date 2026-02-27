@@ -4,8 +4,14 @@
 class TableStyleInfo:
     """Style information for an Excel table."""
 
-    def __init__(self, name="TableStyleMedium9", showFirstColumn=False,
-                 showLastColumn=False, showRowStripes=True, showColumnStripes=False):
+    def __init__(
+        self,
+        name="TableStyleMedium9",
+        showFirstColumn=False,
+        showLastColumn=False,
+        showRowStripes=True,
+        showColumnStripes=False,
+    ):
         self.name = name
         self.showFirstColumn = showFirstColumn
         self.showLastColumn = showLastColumn

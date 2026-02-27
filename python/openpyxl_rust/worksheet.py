@@ -1,16 +1,21 @@
 import json
 import re
-from datetime import datetime, date, time
+from datetime import date, datetime, time
+
 from openpyxl_rust.cell import (
-    Cell, _col_letter, _date_to_excel_serial,
-    _BORDER_STYLE_MAP, _FILL_TYPE_MAP, _HALIGN_MAP, _VALIGN_MAP,
-    _underline_to_u8, _vert_align_to_u8,
+    _BORDER_STYLE_MAP,
+    _FILL_TYPE_MAP,
+    _HALIGN_MAP,
+    _VALIGN_MAP,
+    Cell,
+    _col_letter,
+    _date_to_excel_serial,
+    _underline_to_u8,
+    _vert_align_to_u8,
 )
+from openpyxl_rust.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule, FormulaRule, IconSetRule
+from openpyxl_rust.page import PageMargins, PrintOptions, PrintPageSetup
 from openpyxl_rust.protection import SheetProtection
-from openpyxl_rust.page import PrintPageSetup, PageMargins, PrintOptions
-from openpyxl_rust.formatting.rule import (
-    ColorScaleRule, DataBarRule, IconSetRule, CellIsRule, FormulaRule
-)
 
 
 def _parse_cell_ref(ref_str):
@@ -125,10 +130,7 @@ class Worksheet:
         if self._workbook is not None:
             for ws in self._workbook._sheets:
                 if ws is not self and ws.title == value:
-                    raise ValueError(
-                        f"Worksheet title '{value}' already exists. "
-                        "Use a unique title."
-                    )
+                    raise ValueError(f"Worksheet title '{value}' already exists. Use a unique title.")
         self._title = value
         if self._workbook is not None and self._sheet_idx is not None:
             self._workbook._rust_wb.set_sheet_title(self._sheet_idx, value)
@@ -254,15 +256,9 @@ class Worksheet:
         else:
             for row in range(min_row, max_row + 1):
                 if values_only:
-                    yield tuple(
-                        self._get_cell_value(row, col)
-                        for col in range(min_col, max_col + 1)
-                    )
+                    yield tuple(self._get_cell_value(row, col) for col in range(min_col, max_col + 1))
                 else:
-                    yield tuple(
-                        self.cell(row=row, column=col)
-                        for col in range(min_col, max_col + 1)
-                    )
+                    yield tuple(self.cell(row=row, column=col) for col in range(min_col, max_col + 1))
 
     def iter_cols(self, min_col=None, max_col=None, min_row=None, max_row=None, values_only=False):
         mn_r, mn_c, mx_r, mx_c = self._get_dims()
@@ -279,22 +275,13 @@ class Worksheet:
             )
             num_cols = max_col - min_col + 1
             for ci in range(num_cols):
-                yield tuple(
-                    None if rows[ri][ci] is None else rows[ri][ci]
-                    for ri in range(len(rows))
-                )
+                yield tuple(None if rows[ri][ci] is None else rows[ri][ci] for ri in range(len(rows)))
         else:
             for col in range(min_col, max_col + 1):
                 if values_only:
-                    yield tuple(
-                        self._get_cell_value(row, col)
-                        for row in range(min_row, max_row + 1)
-                    )
+                    yield tuple(self._get_cell_value(row, col) for row in range(min_row, max_row + 1))
                 else:
-                    yield tuple(
-                        self.cell(row=row, column=col)
-                        for row in range(min_row, max_row + 1)
-                    )
+                    yield tuple(self.cell(row=row, column=col) for row in range(min_row, max_row + 1))
 
     @property
     def values(self):
@@ -310,20 +297,14 @@ class Worksheet:
         if isinstance(key, int):
             min_col = self.min_column or 1
             max_col = self.max_column or 1
-            return tuple(
-                self.cell(row=key, column=col)
-                for col in range(min_col, max_col + 1)
-            )
-        if ':' in key:
-            start_ref, end_ref = key.split(':')
+            return tuple(self.cell(row=key, column=col) for col in range(min_col, max_col + 1))
+        if ":" in key:
+            start_ref, end_ref = key.split(":")
             r1, c1 = _parse_cell_ref(start_ref)
             r2, c2 = _parse_cell_ref(end_ref)
             rows = []
             for row in range(r1, r2 + 1):
-                rows.append(tuple(
-                    self.cell(row=row, column=col)
-                    for col in range(c1, c2 + 1)
-                ))
+                rows.append(tuple(self.cell(row=row, column=col) for col in range(c1, c2 + 1)))
             return tuple(rows)
         row, col = _parse_cell_ref(key)
         return self.cell(row=row, column=col)
@@ -349,7 +330,9 @@ class Worksheet:
                     t = type(value)
                     if t is datetime:
                         serial = _date_to_excel_serial(value.year, value.month, value.day)
-                        serial += (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
+                        serial += (
+                            value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000
+                        ) / 86400.0
                         converted.append(serial)
                         datetime_cells.append((col_idx, "yyyy-mm-dd hh:mm:ss", 2, serial))
                     elif t is date:
@@ -357,7 +340,9 @@ class Worksheet:
                         converted.append(serial)
                         datetime_cells.append((col_idx, "yyyy-mm-dd", 0, serial))
                     elif t is time:
-                        serial = (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
+                        serial = (
+                            value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000
+                        ) / 86400.0
                         converted.append(serial)
                         datetime_cells.append((col_idx, "hh:mm:ss", 1, serial))
                     elif t is int:
@@ -394,15 +379,21 @@ class Worksheet:
                         t = type(value)
                         if t is datetime:
                             serial = _date_to_excel_serial(value.year, value.month, value.day)
-                            serial += (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
+                            serial += (
+                                value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000
+                            ) / 86400.0
                             converted_row.append(serial)
-                            datetime_cells.append((start_row_0based + row_offset, col_offset, "yyyy-mm-dd hh:mm:ss", 2, serial))
+                            datetime_cells.append(
+                                (start_row_0based + row_offset, col_offset, "yyyy-mm-dd hh:mm:ss", 2, serial)
+                            )
                         elif t is date:
                             serial = _date_to_excel_serial(value.year, value.month, value.day)
                             converted_row.append(serial)
                             datetime_cells.append((start_row_0based + row_offset, col_offset, "yyyy-mm-dd", 0, serial))
                         elif t is time:
-                            serial = (value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000) / 86400.0
+                            serial = (
+                                value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000
+                            ) / 86400.0
                             converted_row.append(serial)
                             datetime_cells.append((start_row_0based + row_offset, col_offset, "hh:mm:ss", 1, serial))
                         elif t is int:
@@ -410,9 +401,7 @@ class Worksheet:
                         else:
                             converted_row.append(value)
                 rows_list.append(converted_row)
-            self._workbook._rust_wb.set_rows_batch(
-                self._sheet_idx, start_row_0based, rows_list
-            )
+            self._workbook._rust_wb.set_rows_batch(self._sheet_idx, start_row_0based, rows_list)
             wb = self._workbook._rust_wb
             for r0, c0, fmt_str, kind, serial in datetime_cells:
                 wb.set_cell_datetime(self._sheet_idx, r0, c0, serial, kind)
@@ -433,9 +422,7 @@ class Worksheet:
         if self._workbook is not None and self._sheet_idx is not None:
             r1, c1 = _parse_cell_ref(start_ref)
             r2, c2 = _parse_cell_ref(end_ref)
-            self._workbook._rust_wb.add_merge_range(
-                self._sheet_idx, r1 - 1, c1 - 1, r2 - 1, c2 - 1
-            )
+            self._workbook._rust_wb.add_merge_range(self._sheet_idx, r1 - 1, c1 - 1, r2 - 1, c2 - 1)
 
     def unmerge_cells(self, range_string):
         parts = range_string.split(":")
@@ -450,7 +437,7 @@ class Worksheet:
         if self._workbook is not None and self._sheet_idx is not None:
             wb = self._workbook._rust_wb
             wb.clear_merge_ranges(self._sheet_idx)
-            for (s, e) in self.merged_cell_ranges:
+            for s, e in self.merged_cell_ranges:
                 r1, c1 = _parse_cell_ref(s)
                 r2, c2 = _parse_cell_ref(e)
                 wb.add_merge_range(self._sheet_idx, r1 - 1, c1 - 1, r2 - 1, c2 - 1)
@@ -471,7 +458,7 @@ class Worksheet:
         self._formatted_cells = new_fc
         # Shift merged_cell_ranges (Python-side list for API compat)
         new_merged = []
-        for (start_ref, end_ref) in self.merged_cell_ranges:
+        for start_ref, end_ref in self.merged_cell_ranges:
             r1, c1 = _parse_cell_ref(start_ref)
             r2, c2 = _parse_cell_ref(end_ref)
             if r1 >= idx:
@@ -495,7 +482,7 @@ class Worksheet:
                 new_fc[(r, c)] = cell
         self._formatted_cells = new_fc
         new_merged = []
-        for (start_ref, end_ref) in self.merged_cell_ranges:
+        for start_ref, end_ref in self.merged_cell_ranges:
             r1, c1 = _parse_cell_ref(start_ref)
             r2, c2 = _parse_cell_ref(end_ref)
             if r1 >= idx and r2 < idx + amount:
@@ -519,7 +506,7 @@ class Worksheet:
                 new_fc[(r, c)] = cell
         self._formatted_cells = new_fc
         new_merged = []
-        for (start_ref, end_ref) in self.merged_cell_ranges:
+        for start_ref, end_ref in self.merged_cell_ranges:
             r1, c1 = _parse_cell_ref(start_ref)
             r2, c2 = _parse_cell_ref(end_ref)
             if c1 >= idx:
@@ -543,7 +530,7 @@ class Worksheet:
                 new_fc[(r, c)] = cell
         self._formatted_cells = new_fc
         new_merged = []
-        for (start_ref, end_ref) in self.merged_cell_ranges:
+        for start_ref, end_ref in self.merged_cell_ranges:
             r1, c1 = _parse_cell_ref(start_ref)
             r2, c2 = _parse_cell_ref(end_ref)
             if c1 >= idx and c2 < idx + amount:
@@ -591,8 +578,12 @@ class Worksheet:
             if cell.font is not None:
                 f = cell.font
                 wb.set_cell_font(
-                    idx, r0, c0,
-                    f.bold, f.italic, f.name,
+                    idx,
+                    r0,
+                    c0,
+                    f.bold,
+                    f.italic,
+                    f.name,
                     float(f.size) if f.size is not None else None,
                     f.color,
                     _underline_to_u8(f.underline),
@@ -603,7 +594,9 @@ class Worksheet:
             if cell.alignment is not None:
                 a = cell.alignment
                 wb.set_cell_alignment(
-                    idx, r0, c0,
+                    idx,
+                    r0,
+                    c0,
                     _HALIGN_MAP.get(a.horizontal) if a.horizontal else None,
                     _VALIGN_MAP.get(a.vertical) if a.vertical else None,
                     bool(a.wrap_text),
@@ -615,7 +608,9 @@ class Worksheet:
             if cell.fill is not None:
                 fi = cell.fill
                 wb.set_cell_fill(
-                    idx, r0, c0,
+                    idx,
+                    r0,
+                    c0,
                     _FILL_TYPE_MAP.get(fi.fill_type) if fi.fill_type else None,
                     fi.start_color,
                     fi.end_color,
@@ -624,7 +619,9 @@ class Worksheet:
             if cell.border is not None:
                 b = cell.border
                 wb.set_cell_border(
-                    idx, r0, c0,
+                    idx,
+                    r0,
+                    c0,
                     _BORDER_STYLE_MAP.get(b.left.style) if b.left.style else None,
                     b.left.color,
                     _BORDER_STYLE_MAP.get(b.right.style) if b.right.style else None,
@@ -811,9 +808,7 @@ class Worksheet:
                 table_data["row_stripes"] = si.showRowStripes
                 table_data["column_stripes"] = si.showColumnStripes
             if table.tableColumns:
-                table_data["columns"] = [
-                    {"name": tc.name} for tc in table.tableColumns
-                ]
+                table_data["columns"] = [{"name": tc.name} for tc in table.tableColumns]
             wb.add_table(idx, json.dumps(table_data))
 
         # Charts
@@ -833,11 +828,11 @@ class Worksheet:
 
         # Determine rust_xlsxwriter chart type
         chart_type = chart.chart_type
-        if chart_type == "column" and hasattr(chart, 'type') and chart.type == "bar":
+        if chart_type == "column" and hasattr(chart, "type") and chart.type == "bar":
             chart_type = "bar"
 
         # Handle grouping → stacked/percentStacked variants
-        grouping = getattr(chart, 'grouping', None)
+        grouping = getattr(chart, "grouping", None)
         if grouping == "stacked" and chart_type in ("column", "bar", "line", "area"):
             chart_type = chart_type + "_stacked"
         elif grouping == "percentStacked" and chart_type in ("column", "bar", "line", "area"):

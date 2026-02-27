@@ -1,13 +1,14 @@
 # tests/test_bugfixes_v05.py
 """Tests for v0.5 bug fixes."""
+
 import os
 import tempfile
-from datetime import datetime, date, time
+from datetime import date, datetime, time
 
 import openpyxl as real_openpyxl
+
 from openpyxl_rust import Workbook
 from openpyxl_rust.worksheet import _date_to_excel_serial
-
 
 # =====================================================================
 # Bug 1: datetime.time should not crash in _set_rust_value
@@ -59,7 +60,7 @@ def test_time_serial_calculation():
     t = time(14, 30, 0)
     ws["A1"] = t
     # The serial value should be fractional day
-    expected = (14 * 3600 + 30 * 60) / 86400.0
+    (14 * 3600 + 30 * 60) / 86400.0
     # We can verify via Rust side by saving and checking the number
     with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
         path = f.name
@@ -120,10 +121,12 @@ def test_append_rows_datetime_saves_correctly():
     ws = wb.active
     dt = datetime(2024, 6, 15, 14, 30, 0)
     d = date(2024, 1, 1)
-    ws.append_rows([
-        [dt, "datetime"],
-        [d, "date"],
-    ])
+    ws.append_rows(
+        [
+            [dt, "datetime"],
+            [d, "date"],
+        ]
+    )
 
     with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
         path = f.name
@@ -199,10 +202,12 @@ def test_append_rows_mixed_with_datetime():
     """append_rows with mixed types including datetime should work."""
     wb = Workbook()
     ws = wb.active
-    ws.append_rows([
-        [1, "hello", datetime(2024, 1, 1), True],
-        [2, "world", date(2024, 6, 15), False],
-    ])
+    ws.append_rows(
+        [
+            [1, "hello", datetime(2024, 1, 1), True],
+            [2, "world", date(2024, 6, 15), False],
+        ]
+    )
 
     with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
         path = f.name
@@ -297,7 +302,9 @@ def test_print_headings_with_gridlines():
 def test_no_json_mod_import():
     """Verify that json_mod is not used anywhere in worksheet.py source."""
     import inspect
+
     from openpyxl_rust import worksheet
+
     source = inspect.getsource(worksheet)
     assert "json_mod" not in source, "Found 'json_mod' in worksheet.py source"
 

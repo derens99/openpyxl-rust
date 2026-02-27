@@ -11,6 +11,7 @@ Usage:
     py benchmarks/generate_report.py --quick      # skip large benchmarks
     py benchmarks/generate_report.py --save-only  # suppress terminal, only save file
 """
+
 import argparse
 import io
 import os
@@ -18,10 +19,9 @@ import platform
 import subprocess
 import sys
 import tempfile
-import textwrap
 import time
 import tracemalloc
-from datetime import datetime, date
+from datetime import date, datetime
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -90,12 +90,15 @@ class ReportBuilder:
 # 1. Test Suite
 # ---------------------------------------------------------------------------
 
+
 def run_test_suite():
     """Run pytest and return (passed, failed, errors, duration, raw_output)."""
     start = time.perf_counter()
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=short", "-q"],
-        capture_output=True, text=True, cwd=str(Path(__file__).resolve().parent.parent),
+        capture_output=True,
+        text=True,
+        cwd=str(Path(__file__).resolve().parent.parent),
     )
     duration = time.perf_counter() - start
     output = result.stdout + result.stderr
@@ -106,6 +109,7 @@ def run_test_suite():
         line = line.strip()
         if "passed" in line:
             import re
+
             m = re.search(r"(\d+) passed", line)
             if m:
                 passed = int(m.group(1))
@@ -155,17 +159,20 @@ def format_test_section(passed, failed, errors, duration):
 # 2. Performance Benchmarks
 # ---------------------------------------------------------------------------
 
+
 def _bench_write(lib, rows, cols, use_styles=False, sheets=1):
     """Generic benchmark: write data using either 'openpyxl' or 'openpyxl_rust'."""
     if lib == "openpyxl":
         import openpyxl
         from openpyxl.styles import Font
+
         wb = openpyxl.Workbook()
         if sheets > 1:
             wb.remove(wb.active)
     else:
         from openpyxl_rust import Workbook
         from openpyxl_rust.styles import Font
+
         wb = Workbook()
         if sheets > 1:
             # For rust, rename default sheet as first
@@ -215,6 +222,7 @@ def _bench_write(lib, rows, cols, use_styles=False, sheets=1):
 def _bench_batch_write(rows, cols):
     """Benchmark using openpyxl_rust's batch API."""
     from openpyxl_rust import Workbook
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Data"
@@ -248,6 +256,7 @@ def _bench_read(lib, xlsx_path):
     """Benchmark reading an xlsx file."""
     if lib == "openpyxl":
         import openpyxl
+
         wb = openpyxl.load_workbook(xlsx_path, data_only=True)
         total = 0
         for ws in wb.worksheets:
@@ -258,10 +267,11 @@ def _bench_read(lib, xlsx_path):
         return total
     else:
         from openpyxl_rust import load_workbook
+
         wb = load_workbook(xlsx_path, data_only=True)
         total = 0
         for ws in wb._sheets:
-            for (r, c), cell in ws._cells.items():
+            for (_r, _c), cell in ws._cells.items():
                 if cell.value is not None:
                     total += 1
         return total
@@ -329,6 +339,7 @@ def run_benchmarks(quick=False):
         read_path = f.name
     read_rows = 50_000 if not quick else 5_000
     import openpyxl as _opx
+
     _wb = _opx.Workbook()
     _ws = _wb.active
     for r in range(1, read_rows + 1):
@@ -337,12 +348,14 @@ def run_benchmarks(quick=False):
         _ws.cell(row=r, column=3, value=r % 2 == 0)
     _wb.save(read_path)
 
-    benchmarks.append({
-        "name": f"Read file ({read_rows:,} rows x 3 cols)",
-        "category": "read",
-        "fn_openpyxl": lambda: _bench_read("openpyxl", read_path),
-        "fn_rust": lambda: _bench_read("openpyxl_rust", read_path),
-    })
+    benchmarks.append(
+        {
+            "name": f"Read file ({read_rows:,} rows x 3 cols)",
+            "category": "read",
+            "fn_openpyxl": lambda: _bench_read("openpyxl", read_path),
+            "fn_rust": lambda: _bench_read("openpyxl_rust", read_path),
+        }
+    )
 
     for b in benchmarks:
         print(f"  Benchmarking: {b['name']}...")
@@ -355,17 +368,19 @@ def run_benchmarks(quick=False):
             mem_rust, _ = _memory_fn(b["fn_rust"])
 
         speedup = t_openpyxl / t_rust if t_rust > 0 else float("inf")
-        results.append({
-            "name": b["name"],
-            "category": b["category"],
-            "t_openpyxl": t_openpyxl,
-            "t_rust": t_rust,
-            "speedup": speedup,
-            "size_openpyxl": size_openpyxl if b["category"] == "write" else None,
-            "size_rust": size_rust if b["category"] == "write" else None,
-            "mem_openpyxl": mem_openpyxl,
-            "mem_rust": mem_rust,
-        })
+        results.append(
+            {
+                "name": b["name"],
+                "category": b["category"],
+                "t_openpyxl": t_openpyxl,
+                "t_rust": t_rust,
+                "speedup": speedup,
+                "size_openpyxl": size_openpyxl if b["category"] == "write" else None,
+                "size_rust": size_rust if b["category"] == "write" else None,
+                "mem_openpyxl": mem_openpyxl,
+                "mem_rust": mem_rust,
+            }
+        )
 
     os.unlink(read_path)
     return results
@@ -381,9 +396,7 @@ def format_benchmark_section(results):
     lines.append(f"  {'-' * 45} {'-' * 9} {'-' * 9} {'-' * 9}")
     for r in results:
         marker = " **" if r["speedup"] >= 3.0 else ""
-        lines.append(
-            f"  {r['name']:<45} {r['t_openpyxl']:>8.2f}s {r['t_rust']:>8.2f}s {r['speedup']:>8.1f}x{marker}"
-        )
+        lines.append(f"  {r['name']:<45} {r['t_openpyxl']:>8.2f}s {r['t_rust']:>8.2f}s {r['speedup']:>8.1f}x{marker}")
     avg = sum(r["speedup"] for r in results) / len(results)
     lines.append(f"  {'-' * 45} {'-' * 9} {'-' * 9} {'-' * 9}")
     lines.append(f"  {'AVERAGE':>45} {'':>9} {'':>9} {avg:>8.1f}x")
@@ -409,8 +422,7 @@ def format_benchmark_section(results):
         for r in write_results:
             diff = _pct_change(r["size_openpyxl"], r["size_rust"])
             lines.append(
-                f"  {r['name']:<45} {_fmt_bytes(r['size_openpyxl']):>12} "
-                f"{_fmt_bytes(r['size_rust']):>12} {diff:>8}"
+                f"  {r['name']:<45} {_fmt_bytes(r['size_openpyxl']):>12} {_fmt_bytes(r['size_rust']):>12} {diff:>8}"
             )
         lines.append("")
 
@@ -424,8 +436,7 @@ def format_benchmark_section(results):
         for r in mem_results:
             savings = _pct_change(r["mem_openpyxl"], r["mem_rust"])
             lines.append(
-                f"  {r['name']:<45} {_fmt_bytes(r['mem_openpyxl']):>12} "
-                f"{_fmt_bytes(r['mem_rust']):>12} {savings:>8}"
+                f"  {r['name']:<45} {_fmt_bytes(r['mem_openpyxl']):>12} {_fmt_bytes(r['mem_rust']):>12} {savings:>8}"
             )
         lines.append("")
 
@@ -435,6 +446,7 @@ def format_benchmark_section(results):
 # ---------------------------------------------------------------------------
 # 3. Feature Parity
 # ---------------------------------------------------------------------------
+
 
 def check_feature_parity():
     """Check which openpyxl APIs we support and return structured results."""
@@ -450,227 +462,353 @@ def check_feature_parity():
     # --- Data Types ---
     def _strings():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active; ws["A1"] = "hello"
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "hello"
         assert ws["A1"].value == "hello"
+
     _check("String values", "Data Types", _strings)
 
     def _numbers():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active; ws["A1"] = 42.5
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = 42.5
         assert ws["A1"].value == 42.5
+
     _check("Numeric values (int/float)", "Data Types", _numbers)
 
     def _booleans():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active; ws["A1"] = True
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = True
         assert ws["A1"].value is True
+
     _check("Boolean values", "Data Types", _booleans)
 
     def _dates():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active; ws["A1"] = date(2026, 1, 15)
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = date(2026, 1, 15)
+
     _check("Date values", "Data Types", _dates)
 
     def _datetimes():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active; ws["A1"] = datetime(2026, 1, 15, 10, 30)
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = datetime(2026, 1, 15, 10, 30)
+
     _check("Datetime values", "Data Types", _datetimes)
 
     def _formulas():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active; ws["A1"] = "=SUM(B1:B10)"
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "=SUM(B1:B10)"
+
     _check("Formula strings", "Data Types", _formulas)
 
     def _none():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active; ws["A1"] = None
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = None
+
     _check("None / blank cells", "Data Types", _none)
 
     def _type_validation():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
+
+        wb = Workbook()
+        ws = wb.active
         try:
             ws["A1"] = [1, 2, 3]
             raise AssertionError("Should have raised TypeError")
         except TypeError:
             pass
+
     _check("Type validation (rejects invalid)", "Data Types", _type_validation)
 
     # --- Styling ---
     def _font():
         from openpyxl_rust import Workbook
         from openpyxl_rust.styles import Font
-        wb = Workbook(); ws = wb.active
+
+        wb = Workbook()
+        ws = wb.active
         ws["A1"] = "bold"
         ws["A1"].font = Font(bold=True, italic=True, size=14, name="Arial", color="FF0000")
+
     _check("Font (bold/italic/size/name/color)", "Styling", _font)
 
     def _font_underline():
         from openpyxl_rust import Workbook
         from openpyxl_rust.styles import Font
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = "underline"; ws["A1"].font = Font(underline="single")
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "underline"
+        ws["A1"].font = Font(underline="single")
+
     _check("Font underline", "Styling", _font_underline)
 
     def _font_strike():
         from openpyxl_rust import Workbook
         from openpyxl_rust.styles import Font
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = "strike"; ws["A1"].font = Font(strikethrough=True)
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "strike"
+        ws["A1"].font = Font(strikethrough=True)
+
     _check("Font strikethrough", "Styling", _font_strike)
 
     def _font_vert():
         from openpyxl_rust import Workbook
         from openpyxl_rust.styles import Font
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = "sup"; ws["A1"].font = Font(vertAlign="superscript")
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "sup"
+        ws["A1"].font = Font(vertAlign="superscript")
+
     _check("Font superscript/subscript", "Styling", _font_vert)
 
     def _numfmt():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = 42000; ws["A1"].number_format = "$#,##0.00"
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = 42000
+        ws["A1"].number_format = "$#,##0.00"
+
     _check("Number formats", "Styling", _numfmt)
 
     def _alignment():
         from openpyxl_rust import Workbook
         from openpyxl_rust.styles import Alignment
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = "center"; ws["A1"].alignment = Alignment(horizontal="center", wrap_text=True)
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "center"
+        ws["A1"].alignment = Alignment(horizontal="center", wrap_text=True)
+
     _check("Alignment (horiz/vert/wrap/rotation)", "Styling", _alignment)
 
     def _border():
         from openpyxl_rust import Workbook
         from openpyxl_rust.styles import Border, Side
-        wb = Workbook(); ws = wb.active
+
+        wb = Workbook()
+        ws = wb.active
         ws["A1"] = "box"
         ws["A1"].border = Border(left=Side(style="thin"), right=Side(style="thin"))
+
     _check("Borders (left/right/top/bottom)", "Styling", _border)
 
     def _diag_border():
         from openpyxl_rust import Workbook
         from openpyxl_rust.styles import Border, Side
-        wb = Workbook(); ws = wb.active
+
+        wb = Workbook()
+        ws = wb.active
         ws["A1"] = "diag"
         ws["A1"].border = Border(diagonal=Side(style="thin"), diagonalUp=True)
+
     _check("Diagonal borders", "Styling", _diag_border)
 
     def _fill():
         from openpyxl_rust import Workbook
         from openpyxl_rust.styles import PatternFill
-        wb = Workbook(); ws = wb.active
+
+        wb = Workbook()
+        ws = wb.active
         ws["A1"] = "filled"
         ws["A1"].fill = PatternFill(fill_type="solid", start_color="FFFF00")
+
     _check("Pattern fills", "Styling", _fill)
 
     # --- Structure ---
     def _multi_sheet():
         from openpyxl_rust import Workbook
-        wb = Workbook(); wb.create_sheet("Extra")
+
+        wb = Workbook()
+        wb.create_sheet("Extra")
         assert len(wb.sheetnames) == 2
+
     _check("Multiple worksheets", "Structure", _multi_sheet)
 
     def _remove_sheet():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws2 = wb.create_sheet("Extra"); wb.remove(ws2)
+
+        wb = Workbook()
+        ws2 = wb.create_sheet("Extra")
+        wb.remove(ws2)
         assert len(wb.sheetnames) == 1
+
     _check("Remove worksheet", "Structure", _remove_sheet)
 
     def _col_width():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
+
+        wb = Workbook()
+        ws = wb.active
         ws.column_dimensions["A"].width = 25
+
     _check("Column widths", "Structure", _col_width)
 
     def _row_height():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
+
+        wb = Workbook()
+        ws = wb.active
         ws.row_dimensions[1].height = 30
+
     _check("Row heights", "Structure", _row_height)
 
     def _freeze():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active; ws.freeze_panes = "A2"
+
+        wb = Workbook()
+        ws = wb.active
+        ws.freeze_panes = "A2"
+
     _check("Freeze panes", "Structure", _freeze)
 
     def _merge():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active; ws.merge_cells("A1:D1")
+
+        wb = Workbook()
+        ws = wb.active
+        ws.merge_cells("A1:D1")
+
     _check("Merged cells", "Structure", _merge)
 
     def _insert_rows():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = "before"; ws.insert_rows(1, 2)
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "before"
+        ws.insert_rows(1, 2)
+
     _check("Insert rows", "Structure", _insert_rows)
 
     def _delete_rows():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = "del"; ws["A2"] = "keep"; ws.delete_rows(1)
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "del"
+        ws["A2"] = "keep"
+        ws.delete_rows(1)
+
     _check("Delete rows", "Structure", _delete_rows)
 
     def _insert_cols():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = "before"; ws.insert_cols(1, 2)
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "before"
+        ws.insert_cols(1, 2)
+
     _check("Insert columns", "Structure", _insert_cols)
 
     def _delete_cols():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = "del"; ws["B1"] = "keep"; ws.delete_cols(1)
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "del"
+        ws["B1"] = "keep"
+        ws.delete_cols(1)
+
     _check("Delete columns", "Structure", _delete_cols)
 
     # --- Iteration ---
     def _iter_rows():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = 1; ws["B2"] = 2
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = 1
+        ws["B2"] = 2
         rows = list(ws.iter_rows(values_only=True))
         assert len(rows) == 2
+
     _check("iter_rows()", "Iteration", _iter_rows)
 
     def _iter_cols():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = 1; ws["B2"] = 2
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = 1
+        ws["B2"] = 2
         cols = list(ws.iter_cols(values_only=True))
         assert len(cols) == 2
+
     _check("iter_cols()", "Iteration", _iter_cols)
 
     def _dimensions():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = 1; ws["C3"] = 2
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = 1
+        ws["C3"] = 2
         assert ws.dimensions == "A1:C3"
+
     _check("Dimension properties", "Iteration", _dimensions)
 
     def _values():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
+
+        wb = Workbook()
+        ws = wb.active
         ws["A1"] = "x"
         assert list(ws.values) is not None
+
     _check("values property", "Iteration", _values)
 
     # --- Batch API ---
     def _append():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
+
+        wb = Workbook()
+        ws = wb.active
         ws.append(["a", "b", "c"])
         assert ws.cell(row=1, column=1).value == "a"
+
     _check("append() single row", "Batch", _append)
 
     def _append_rows():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
+
+        wb = Workbook()
+        ws = wb.active
         ws.append_rows([[1, 2], [3, 4]])
+
     _check("append_rows() batch", "Batch", _append_rows)
 
     # --- I/O ---
     def _save_file():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active; ws["A1"] = "test"
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "test"
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
             path = f.name
         try:
@@ -678,18 +816,27 @@ def check_feature_parity():
             assert os.path.getsize(path) > 0
         finally:
             os.unlink(path)
+
     _check("Save to file path", "I/O", _save_file)
 
     def _save_buffer():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active; ws["A1"] = "test"
-        buf = io.BytesIO(); wb.save(buf)
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "test"
+        buf = io.BytesIO()
+        wb.save(buf)
         assert buf.tell() > 0
+
     _check("Save to BytesIO", "I/O", _save_buffer)
 
     def _load():
         from openpyxl_rust import Workbook, load_workbook
-        wb = Workbook(); ws = wb.active; ws["A1"] = "loaded"
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "loaded"
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
             path = f.name
         try:
@@ -698,75 +845,105 @@ def check_feature_parity():
             assert wb2.active.cell(row=1, column=1).value == "loaded"
         finally:
             os.unlink(path)
+
     _check("load_workbook() (Rust/calamine)", "I/O", _load)
 
     # --- Advanced ---
     def _autofilter():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
+
+        wb = Workbook()
+        ws = wb.active
         ws.auto_filter.ref = "A1:C10"
+
     _check("Auto filter", "Advanced", _autofilter)
 
     def _comment():
-        from openpyxl_rust import Workbook, Comment
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = "noted"; ws["A1"].comment = Comment("Note", "Author")
+        from openpyxl_rust import Comment, Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "noted"
+        ws["A1"].comment = Comment("Note", "Author")
+
     _check("Comments / notes", "Advanced", _comment)
 
     def _hyperlink():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = "link"; ws["A1"].hyperlink = "https://example.com"
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "link"
+        ws["A1"].hyperlink = "https://example.com"
+
     _check("Hyperlinks", "Advanced", _hyperlink)
 
     def _image():
         from openpyxl_rust import Workbook
         from openpyxl_rust.image import Image
-        wb = Workbook(); ws = wb.active
+
+        wb = Workbook()
+        ws = wb.active
         # 1x1 white PNG
-        png = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
-               b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00"
-               b"\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00"
-               b"\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82")
+        png = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+            b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00"
+            b"\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00"
+            b"\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
         ws.add_image(Image(png), "A1")
+
     _check("Embedded images", "Advanced", _image)
 
     def _dv():
         from openpyxl_rust import Workbook
         from openpyxl_rust.datavalidation import DataValidation
-        wb = Workbook(); ws = wb.active
+
+        wb = Workbook()
+        ws = wb.active
         dv = DataValidation(type="list", formula1='"A,B,C"')
         dv.add("A1")
         ws.add_data_validation(dv)
+
     _check("Data validation", "Advanced", _dv)
 
     def _cond_fmt():
-        from openpyxl_rust import Workbook, ColorScaleRule
-        wb = Workbook(); ws = wb.active
-        rule = ColorScaleRule(start_type="min", start_color="FF0000",
-                              end_type="max", end_color="00FF00")
+        from openpyxl_rust import ColorScaleRule, Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        rule = ColorScaleRule(start_type="min", start_color="FF0000", end_type="max", end_color="00FF00")
         ws.conditional_formatting.add("A1:A10", rule)
+
     _check("Conditional formatting", "Advanced", _cond_fmt)
 
     def _named_range():
-        from openpyxl_rust import Workbook, DefinedName
+        from openpyxl_rust import DefinedName, Workbook
+
         wb = Workbook()
         dn = DefinedName("MyRange", attr_text="Sheet!$A$1:$C$10")
         wb.defined_names.add(dn)
+
     _check("Named ranges / defined names", "Advanced", _named_range)
 
     def _page_setup():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
+
+        wb = Workbook()
+        ws = wb.active
         ws.page_setup.orientation = "landscape"
         ws.page_setup.paperSize = 9
+
     _check("Page setup (orientation/paper/margins)", "Advanced", _page_setup)
 
     def _protection():
         from openpyxl_rust import Workbook
-        wb = Workbook(); ws = wb.active
+
+        wb = Workbook()
+        ws = wb.active
         ws.protection.sheet = True
         ws.protection.password = "secret"
+
     _check("Sheet protection", "Advanced", _protection)
 
     # --- Not supported ---
@@ -809,6 +986,7 @@ def format_feature_section(features):
 # 4. Correctness Verification
 # ---------------------------------------------------------------------------
 
+
 def run_correctness_checks():
     """Write files with openpyxl_rust, reload with openpyxl, verify values match."""
     checks = []
@@ -821,10 +999,14 @@ def run_correctness_checks():
             checks.append((name, False, str(e)))
 
     def _roundtrip_strings():
-        from openpyxl_rust import Workbook
         import openpyxl
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = "hello"; ws["A2"] = "world"
+
+        from openpyxl_rust import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "hello"
+        ws["A2"] = "world"
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
             path = f.name
         try:
@@ -834,13 +1016,18 @@ def run_correctness_checks():
             assert wb2.active["A2"].value == "world"
         finally:
             os.unlink(path)
+
     _verify("String roundtrip (write rust -> read openpyxl)", _roundtrip_strings)
 
     def _roundtrip_numbers():
-        from openpyxl_rust import Workbook
         import openpyxl
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = 42; ws["A2"] = 3.14159
+
+        from openpyxl_rust import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = 42
+        ws["A2"] = 3.14159
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
             path = f.name
         try:
@@ -850,13 +1037,18 @@ def run_correctness_checks():
             assert abs(wb2.active["A2"].value - 3.14159) < 1e-10
         finally:
             os.unlink(path)
+
     _verify("Number roundtrip (int + float)", _roundtrip_numbers)
 
     def _roundtrip_bool():
-        from openpyxl_rust import Workbook
         import openpyxl
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = True; ws["A2"] = False
+
+        from openpyxl_rust import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = True
+        ws["A2"] = False
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
             path = f.name
         try:
@@ -866,15 +1058,21 @@ def run_correctness_checks():
             assert wb2.active["A2"].value is False
         finally:
             os.unlink(path)
+
     _verify("Boolean roundtrip", _roundtrip_bool)
 
     def _roundtrip_styles():
+        import openpyxl
+
         from openpyxl_rust import Workbook
         from openpyxl_rust.styles import Font
-        import openpyxl
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = "bold"; ws["A1"].font = Font(bold=True, size=14)
-        ws["A2"] = 42000; ws["A2"].number_format = "$#,##0.00"
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "bold"
+        ws["A1"].font = Font(bold=True, size=14)
+        ws["A2"] = 42000
+        ws["A2"].number_format = "$#,##0.00"
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
             path = f.name
         try:
@@ -885,14 +1083,20 @@ def run_correctness_checks():
             assert wb2.active["A2"].number_format == "$#,##0.00"
         finally:
             os.unlink(path)
+
     _verify("Style roundtrip (font + number format)", _roundtrip_styles)
 
     def _roundtrip_multisheet():
-        from openpyxl_rust import Workbook
         import openpyxl
-        wb = Workbook(); ws1 = wb.active; ws1.title = "First"
+
+        from openpyxl_rust import Workbook
+
+        wb = Workbook()
+        ws1 = wb.active
+        ws1.title = "First"
         ws2 = wb.create_sheet("Second")
-        ws1["A1"] = "sheet1"; ws2["A1"] = "sheet2"
+        ws1["A1"] = "sheet1"
+        ws2["A1"] = "sheet2"
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
             path = f.name
         try:
@@ -903,13 +1107,18 @@ def run_correctness_checks():
             assert wb2["Second"]["A1"].value == "sheet2"
         finally:
             os.unlink(path)
+
     _verify("Multi-sheet roundtrip", _roundtrip_multisheet)
 
     def _roundtrip_merge():
-        from openpyxl_rust import Workbook
         import openpyxl
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = "merged"; ws.merge_cells("A1:C1")
+
+        from openpyxl_rust import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "merged"
+        ws.merge_cells("A1:C1")
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
             path = f.name
         try:
@@ -918,13 +1127,17 @@ def run_correctness_checks():
             assert len(wb2.active.merged_cells.ranges) > 0
         finally:
             os.unlink(path)
+
     _verify("Merged cells roundtrip", _roundtrip_merge)
 
     def _roundtrip_unicode():
-        from openpyxl_rust import Workbook
         import openpyxl
-        wb = Workbook(); ws = wb.active
-        ws["A1"] = "Rocket \U0001F680"
+
+        from openpyxl_rust import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "Rocket \U0001f680"
         ws["A2"] = "\u4f60\u597d\u4e16\u754c"  # Chinese
         ws["A3"] = "\u0645\u0631\u062d\u0628\u0627"  # Arabic
         # Only check values that the console can print safely
@@ -937,12 +1150,16 @@ def run_correctness_checks():
             assert wb2.active["A2"].value is not None
         finally:
             os.unlink(path)
+
     _verify("Unicode roundtrip (emoji, CJK, Arabic)", _roundtrip_unicode)
 
     def _roundtrip_large():
-        from openpyxl_rust import Workbook
         import openpyxl
-        wb = Workbook(); ws = wb.active
+
+        from openpyxl_rust import Workbook
+
+        wb = Workbook()
+        ws = wb.active
         for r in range(1, 1001):
             ws.cell(row=r, column=1, value=f"row_{r}")
             ws.cell(row=r, column=2, value=r * 1.5)
@@ -955,6 +1172,7 @@ def run_correctness_checks():
             assert wb2.active.cell(row=1000, column=2).value == 1500.0
         finally:
             os.unlink(path)
+
     _verify("Large data roundtrip (1000 rows)", _roundtrip_large)
 
     return checks
@@ -978,6 +1196,7 @@ def format_correctness_section(checks):
 # 5. Summary
 # ---------------------------------------------------------------------------
 
+
 def format_summary(test_passed, test_total, bench_results, features, checks):
     lines = []
 
@@ -992,9 +1211,9 @@ def format_summary(test_passed, test_total, bench_results, features, checks):
     lines.append(f"  SPEED        {avg_speedup:.1f}x average faster than openpyxl (up to {max_speedup:.1f}x)")
     lines.append(f"  CORRECTNESS  {test_total} tests passing, {len(checks)} roundtrip verifications")
     lines.append(f"  FEATURES     {feat_pass} features supported with openpyxl-compatible API")
-    lines.append(f"  DROP-IN      Same API as openpyxl - change one import line")
-    lines.append(f"  TYPE SAFE    Full .pyi stubs for IDE autocompletion")
-    lines.append(f"  RUST ENGINE  rust_xlsxwriter + calamine via PyO3 - no C dependencies")
+    lines.append("  DROP-IN      Same API as openpyxl - change one import line")
+    lines.append("  TYPE SAFE    Full .pyi stubs for IDE autocompletion")
+    lines.append("  RUST ENGINE  rust_xlsxwriter + calamine via PyO3 - no C dependencies")
     lines.append("")
     lines.append("  QUICK MIGRATION:")
     lines.append("")
@@ -1017,6 +1236,7 @@ def format_summary(test_passed, test_total, bench_results, features, checks):
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def _safe_print(text):
     """Print with fallback for Windows consoles that can't handle unicode."""

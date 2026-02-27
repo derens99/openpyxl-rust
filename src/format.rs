@@ -1,5 +1,5 @@
-use rust_xlsxwriter::Format;
 use crate::types::CellFormat;
+use rust_xlsxwriter::Format;
 
 pub(crate) fn parse_border_style_str(s: &str) -> rust_xlsxwriter::FormatBorder {
     match s {
@@ -21,22 +21,28 @@ pub(crate) fn parse_border_style_str(s: &str) -> rust_xlsxwriter::FormatBorder {
 }
 
 pub(crate) fn parse_color_str(c: &str) -> Option<rust_xlsxwriter::Color> {
-    u32::from_str_radix(c, 16).ok().map(rust_xlsxwriter::Color::from)
+    u32::from_str_radix(c, 16)
+        .ok()
+        .map(rust_xlsxwriter::Color::from)
 }
 
 pub(crate) fn build_format_from_json(json_str: &str) -> Result<Format, String> {
-    let val: serde_json::Value = serde_json::from_str(json_str)
-        .map_err(|e| format!("JSON parse error: {}", e))?;
+    let val: serde_json::Value =
+        serde_json::from_str(json_str).map_err(|e| format!("JSON parse error: {}", e))?;
     let obj = val.as_object().ok_or("Expected JSON object")?;
     let mut fmt = Format::new();
 
     // Font
     if let Some(font) = obj.get("font").and_then(|v| v.as_object()) {
         if let Some(bold) = font.get("bold").and_then(|v| v.as_bool()) {
-            if bold { fmt = fmt.set_bold(); }
+            if bold {
+                fmt = fmt.set_bold();
+            }
         }
         if let Some(italic) = font.get("italic").and_then(|v| v.as_bool()) {
-            if italic { fmt = fmt.set_italic(); }
+            if italic {
+                fmt = fmt.set_italic();
+            }
         }
         if let Some(ul) = font.get("underline").and_then(|v| v.as_str()) {
             if ul == "single" {
@@ -57,12 +63,18 @@ pub(crate) fn build_format_from_json(json_str: &str) -> Result<Format, String> {
             }
         }
         if let Some(st) = font.get("strikethrough").and_then(|v| v.as_bool()) {
-            if st { fmt = fmt.set_font_strikethrough(); }
+            if st {
+                fmt = fmt.set_font_strikethrough();
+            }
         }
         if let Some(va) = font.get("vertAlign").and_then(|v| v.as_str()) {
             match va {
-                "superscript" => { fmt = fmt.set_font_script(rust_xlsxwriter::FormatScript::Superscript); }
-                "subscript" => { fmt = fmt.set_font_script(rust_xlsxwriter::FormatScript::Subscript); }
+                "superscript" => {
+                    fmt = fmt.set_font_script(rust_xlsxwriter::FormatScript::Superscript);
+                }
+                "subscript" => {
+                    fmt = fmt.set_font_script(rust_xlsxwriter::FormatScript::Subscript);
+                }
                 _ => {}
             }
         }
@@ -77,7 +89,9 @@ pub(crate) fn build_format_from_json(json_str: &str) -> Result<Format, String> {
                 "left" => rust_xlsxwriter::FormatAlign::Left,
                 "fill" => rust_xlsxwriter::FormatAlign::Fill,
                 "justify" => rust_xlsxwriter::FormatAlign::Justify,
-                "centerContinuous" | "center_continuous" => rust_xlsxwriter::FormatAlign::CenterAcross,
+                "centerContinuous" | "center_continuous" => {
+                    rust_xlsxwriter::FormatAlign::CenterAcross
+                }
                 "distributed" => rust_xlsxwriter::FormatAlign::Distributed,
                 _ => rust_xlsxwriter::FormatAlign::General,
             };
@@ -95,16 +109,24 @@ pub(crate) fn build_format_from_json(json_str: &str) -> Result<Format, String> {
             fmt = fmt.set_align(a);
         }
         if let Some(wt) = align.get("wrap_text").and_then(|v| v.as_bool()) {
-            if wt { fmt = fmt.set_text_wrap(); }
+            if wt {
+                fmt = fmt.set_text_wrap();
+            }
         }
         if let Some(sf) = align.get("shrink_to_fit").and_then(|v| v.as_bool()) {
-            if sf { fmt = fmt.set_shrink(); }
+            if sf {
+                fmt = fmt.set_shrink();
+            }
         }
         if let Some(indent) = align.get("indent").and_then(|v| v.as_u64()) {
-            if indent > 0 { fmt = fmt.set_indent(indent as u8); }
+            if indent > 0 {
+                fmt = fmt.set_indent(indent as u8);
+            }
         }
         if let Some(rot) = align.get("text_rotation").and_then(|v| v.as_i64()) {
-            if rot != 0 { fmt = fmt.set_rotation(rot as i16); }
+            if rot != 0 {
+                fmt = fmt.set_rotation(rot as i16);
+            }
         }
     }
 
@@ -159,8 +181,14 @@ pub(crate) fn build_format_from_json(json_str: &str) -> Result<Format, String> {
                     fmt = fmt.set_border_diagonal_color(clr);
                 }
             }
-            let diag_up = diag.get("diagonalUp").and_then(|v| v.as_bool()).unwrap_or(false);
-            let diag_down = diag.get("diagonalDown").and_then(|v| v.as_bool()).unwrap_or(false);
+            let diag_up = diag
+                .get("diagonalUp")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let diag_down = diag
+                .get("diagonalDown")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let diag_type = match (diag_up, diag_down) {
                 (true, true) => rust_xlsxwriter::FormatDiagonalBorder::BorderUpDown,
                 (true, false) => rust_xlsxwriter::FormatDiagonalBorder::BorderUp,
@@ -271,8 +299,14 @@ pub(crate) fn cell_format_to_xlsx_format(cf: &CellFormat) -> (Format, bool) {
     }
     if let Some(ul) = cf.font_underline {
         match ul {
-            1 => { fmt = fmt.set_underline(rust_xlsxwriter::FormatUnderline::Single); has_format = true; }
-            2 => { fmt = fmt.set_underline(rust_xlsxwriter::FormatUnderline::Double); has_format = true; }
+            1 => {
+                fmt = fmt.set_underline(rust_xlsxwriter::FormatUnderline::Single);
+                has_format = true;
+            }
+            2 => {
+                fmt = fmt.set_underline(rust_xlsxwriter::FormatUnderline::Double);
+                has_format = true;
+            }
             _ => {}
         }
     }
@@ -282,8 +316,14 @@ pub(crate) fn cell_format_to_xlsx_format(cf: &CellFormat) -> (Format, bool) {
     }
     if let Some(va) = cf.font_vert_align {
         match va {
-            1 => { fmt = fmt.set_font_script(rust_xlsxwriter::FormatScript::Superscript); has_format = true; }
-            2 => { fmt = fmt.set_font_script(rust_xlsxwriter::FormatScript::Subscript); has_format = true; }
+            1 => {
+                fmt = fmt.set_font_script(rust_xlsxwriter::FormatScript::Superscript);
+                has_format = true;
+            }
+            2 => {
+                fmt = fmt.set_font_script(rust_xlsxwriter::FormatScript::Subscript);
+                has_format = true;
+            }
             _ => {}
         }
     }

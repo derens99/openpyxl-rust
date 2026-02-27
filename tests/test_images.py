@@ -1,28 +1,26 @@
-import os
 import struct
-import tempfile
 import zlib
 
 import pytest
 
-from openpyxl_rust import Workbook, Image
+from openpyxl_rust import Image, Workbook
 
 
 def _make_mini_png():
     """Create a minimal valid 1x1 white PNG."""
     # PNG signature
-    sig = b'\x89PNG\r\n\x1a\n'
+    sig = b"\x89PNG\r\n\x1a\n"
     # IHDR chunk
-    ihdr_data = struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0)  # 1x1, 8-bit RGB
-    ihdr_crc = zlib.crc32(b'IHDR' + ihdr_data) & 0xffffffff
-    ihdr = struct.pack('>I', 13) + b'IHDR' + ihdr_data + struct.pack('>I', ihdr_crc)
+    ihdr_data = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)  # 1x1, 8-bit RGB
+    ihdr_crc = zlib.crc32(b"IHDR" + ihdr_data) & 0xFFFFFFFF
+    ihdr = struct.pack(">I", 13) + b"IHDR" + ihdr_data + struct.pack(">I", ihdr_crc)
     # IDAT chunk
-    raw = zlib.compress(b'\x00\xff\xff\xff')  # filter byte + RGB white
-    idat_crc = zlib.crc32(b'IDAT' + raw) & 0xffffffff
-    idat = struct.pack('>I', len(raw)) + b'IDAT' + raw + struct.pack('>I', idat_crc)
+    raw = zlib.compress(b"\x00\xff\xff\xff")  # filter byte + RGB white
+    idat_crc = zlib.crc32(b"IDAT" + raw) & 0xFFFFFFFF
+    idat = struct.pack(">I", len(raw)) + b"IDAT" + raw + struct.pack(">I", idat_crc)
     # IEND chunk
-    iend_crc = zlib.crc32(b'IEND') & 0xffffffff
-    iend = struct.pack('>I', 0) + b'IEND' + struct.pack('>I', iend_crc)
+    iend_crc = zlib.crc32(b"IEND") & 0xFFFFFFFF
+    iend = struct.pack(">I", 0) + b"IEND" + struct.pack(">I", iend_crc)
     return sig + ihdr + idat + iend
 
 
@@ -34,7 +32,7 @@ def test_image_from_bytes(tmp_path):
 
     wb = Workbook()
     ws = wb.active
-    ws.add_image(img, 'A1')
+    ws.add_image(img, "A1")
     out = tmp_path / "img_bytes.xlsx"
     wb.save(str(out))
     assert out.exists()
@@ -52,7 +50,7 @@ def test_image_from_file(tmp_path):
 
     wb = Workbook()
     ws = wb.active
-    ws.add_image(img, 'B2')
+    ws.add_image(img, "B2")
     out = tmp_path / "img_file.xlsx"
     wb.save(str(out))
     assert out.exists()
@@ -67,8 +65,8 @@ def test_image_with_anchor(tmp_path):
 
     wb = Workbook()
     ws = wb.active
-    ws.add_image(img, 'C5')
-    assert img.anchor == 'C5'
+    ws.add_image(img, "C5")
+    assert img.anchor == "C5"
 
     out = tmp_path / "img_anchor.xlsx"
     wb.save(str(out))
@@ -83,16 +81,17 @@ def test_image_save_valid(tmp_path):
 
     wb = Workbook()
     ws = wb.active
-    ws['A1'] = 'Hello'
-    ws.add_image(img, 'D1')
+    ws["A1"] = "Hello"
+    ws.add_image(img, "D1")
     out = tmp_path / "img_valid.xlsx"
     wb.save(str(out))
 
     # Verify the file can be opened by openpyxl (real)
     import openpyxl
+
     wb2 = openpyxl.load_workbook(str(out))
     ws2 = wb2.active
-    assert ws2['A1'].value == 'Hello'
+    assert ws2["A1"].value == "Hello"
     wb2.close()
 
 
@@ -107,9 +106,9 @@ def test_image_multiple(tmp_path):
     img2 = Image(png_data)
     img3 = Image(png_data)
 
-    ws.add_image(img1, 'A1')
-    ws.add_image(img2, 'E5')
-    ws.add_image(img3, 'J10')
+    ws.add_image(img1, "A1")
+    ws.add_image(img2, "E5")
+    ws.add_image(img3, "J10")
 
     assert len(ws._images) == 3
 
@@ -120,6 +119,7 @@ def test_image_multiple(tmp_path):
 
     # Verify the file can be opened by openpyxl (real)
     import openpyxl
+
     wb2 = openpyxl.load_workbook(str(out))
     ws2 = wb2.active
     # openpyxl should load images

@@ -1,15 +1,16 @@
 # tests/test_cell_style_compat.py
 """Tests for cell.data_type property and PatternFill fgColor/bgColor aliases."""
+
 import os
 import tempfile
-from datetime import datetime, date, time
+from datetime import date, datetime, time
 
 from openpyxl_rust import Workbook
 from openpyxl_rust.cell import Cell
 from openpyxl_rust.styles import PatternFill
 
-
 # ── data_type property tests ────────────────────────────────────────
+
 
 def test_data_type_string():
     wb = Workbook()
@@ -76,6 +77,7 @@ def test_data_type_none():
 
 # ── TYPE_* class constants ──────────────────────────────────────────
 
+
 def test_data_type_constants():
     assert Cell.TYPE_STRING == "s"
     assert Cell.TYPE_FORMULA == "f"
@@ -88,6 +90,7 @@ def test_data_type_constants():
 
 
 # ── PatternFill fgColor / bgColor aliases ───────────────────────────
+
 
 def test_fgcolor_constructor():
     fill = PatternFill(fgColor="FF0000")
@@ -126,6 +129,7 @@ def test_bgcolor_property_setter():
 def test_fgcolor_save_roundtrip():
     """Save with fgColor alias, read back with openpyxl, verify color applied."""
     import openpyxl as real_openpyxl
+
     wb = Workbook()
     ws = wb.active
     ws["A1"] = "Red"

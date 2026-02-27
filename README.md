@@ -1,5 +1,9 @@
 # openpyxl_rust
 
+[![Test](https://github.com/derens99/openpyxl-rust/actions/workflows/test.yml/badge.svg)](https://github.com/derens99/openpyxl-rust/actions/workflows/test.yml)
+[![Lint](https://github.com/derens99/openpyxl-rust/actions/workflows/lint.yml/badge.svg)](https://github.com/derens99/openpyxl-rust/actions/workflows/lint.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Fast, Rust-backed Excel (.xlsx) writer with an openpyxl-compatible Python API. Typically **2-3x faster** than openpyxl for write operations.
 
 ## Installation
@@ -70,27 +74,27 @@ wb.save("report.xlsx")
 | Batch row append (append_rows) | Supported |
 | Save to file or BytesIO | Supported |
 | Load workbook (data only) | Supported |
+| Tables / ListObjects | Supported |
+| Charts (Bar, Line, Pie, Area, Scatter, etc.) | Supported |
 | Gradient fills | Not supported |
 | Named styles | Not supported |
-| Charts | Not supported |
 | VBA macros | Not supported |
 | Load with formatting | Not supported |
 
 ## Performance
 
-Benchmarks on 100k rows x 10 columns (mixed types):
+Average **3.5x speedup** over openpyxl across workloads:
 
-| Library | Time | Speedup |
-|---------|------|---------|
-| openpyxl | ~7s | 1x |
-| openpyxl_rust | ~3s | ~2.4x |
-| openpyxl_rust (batch) | ~2.9s | ~2.4x |
-
-Multi-sheet workbooks (5 sheets x 20k rows) see up to **3x** speedup.
+| Benchmark | Speedup |
+|-----------|---------|
+| Large data (100k rows) | 2.8x |
+| Batch append | 3.4x |
+| Formatted cells | 4.5x |
+| Multi-sheet | 3.2x |
 
 ## How It Works
 
-Python classes (`Workbook`, `Worksheet`, `Cell`) mirror openpyxl's API. Cell data is stored in Rust memory via PyO3. At save time, all formatting is serialized to JSON and the Rust engine (`rust_xlsxwriter`) writes the .xlsx file. Reading uses `calamine` for fast parsing.
+Python classes (`Workbook`, `Worksheet`, `Cell`) mirror openpyxl's API. Rust is the sole data store — Python `Cell` is a thin proxy that reads/writes through PyO3 FFI. At save time, the Rust engine (`rust_xlsxwriter`) writes the .xlsx file directly. Reading uses `calamine` for fast parsing.
 
 ## License
 

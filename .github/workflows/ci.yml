@@ -1,0 +1,47 @@
+name: Lint
+
+on:
+  push:
+    branches: [main, dev, "feat/**", "hotfix/**"]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Ruff format check
+        run: ruff format --check python/ tests/ benchmarks/
+
+      - name: Ruff lint check
+        run: ruff check python/ tests/ benchmarks/
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Cargo fmt check
+        run: cargo fmt --check
+
+      - name: Cargo clippy
+        run: cargo clippy -- -D warnings

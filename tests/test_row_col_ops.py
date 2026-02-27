@@ -1,5 +1,6 @@
 import os
 import tempfile
+
 from openpyxl_rust import Workbook
 
 
@@ -54,6 +55,7 @@ def test_insert_rows_saves_correctly():
     try:
         wb.save(path)
         import openpyxl
+
         rb = openpyxl.load_workbook(path)
         rws = rb.active
         assert rws.cell(row=1, column=1).value == "header1"

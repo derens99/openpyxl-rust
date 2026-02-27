@@ -31,6 +31,7 @@ class _DefinedNames:
 class Workbook:
     def __init__(self):
         from openpyxl_rust._openpyxl_rust import RustWorkbook
+
         self._rust_wb = RustWorkbook()
         self._sheets = [Worksheet(title="Sheet", workbook=self, sheet_idx=0)]
         self._active_sheet_index = 0
@@ -54,8 +55,8 @@ class Workbook:
         elif isinstance(value, Worksheet):
             try:
                 self._active_sheet_index = self._sheets.index(value)
-            except ValueError:
-                raise ValueError("Worksheet is not part of this workbook")
+            except ValueError as err:
+                raise ValueError("Worksheet is not part of this workbook") from err
         else:
             raise TypeError("Value must be a Worksheet or an integer index")
 

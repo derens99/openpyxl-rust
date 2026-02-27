@@ -30,9 +30,8 @@ def test_workbook_getitem():
 
 def test_workbook_remove_sheet():
     wb = Workbook()
-    ws1 = wb.active
     ws2 = wb.create_sheet("Second")
-    ws3 = wb.create_sheet("Third")
+    wb.create_sheet("Third")
     wb.remove(ws2)
     assert wb.sheetnames == ["Sheet", "Third"]
     assert len(wb._sheets) == 2
@@ -41,14 +40,16 @@ def test_workbook_remove_sheet():
 def test_workbook_remove_first_sheet():
     wb = Workbook()
     ws1 = wb.active
-    ws2 = wb.create_sheet("Second")
+    wb.create_sheet("Second")
     wb.remove(ws1)
     assert wb.sheetnames == ["Second"]
     assert wb.active.title == "Second"
 
 
 def test_workbook_remove_and_save():
-    import os, tempfile
+    import os
+    import tempfile
+
     wb = Workbook()
     ws1 = wb.active
     ws1["A1"] = "keep"
@@ -60,6 +61,7 @@ def test_workbook_remove_and_save():
     try:
         wb.save(path)
         import openpyxl
+
         rb = openpyxl.load_workbook(path)
         assert rb.sheetnames == ["Sheet"]
         assert rb.active["A1"].value == "keep"
@@ -69,15 +71,19 @@ def test_workbook_remove_and_save():
 
 def test_workbook_remove_nonexistent():
     import pytest
+
     wb = Workbook()
     from openpyxl_rust.worksheet import Worksheet
+
     ws_other = Worksheet(title="Fake")
     with pytest.raises(ValueError):
         wb.remove(ws_other)
 
 
 def test_workbook_remove_reindex():
-    import os, tempfile
+    import os
+    import tempfile
+
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "First"
@@ -93,6 +99,7 @@ def test_workbook_remove_reindex():
     try:
         wb.save(path)
         import openpyxl
+
         rb = openpyxl.load_workbook(path)
         assert rb.sheetnames == ["First", "Last"]
         assert rb["Last"]["A1"].value == "three"
@@ -102,6 +109,7 @@ def test_workbook_remove_reindex():
 
 
 # --- Feature 1: wb.active setter ---
+
 
 def test_active_setter_by_worksheet():
     """Setting active to a specific Worksheet object works."""
@@ -126,6 +134,7 @@ def test_active_setter_by_index():
     assert wb.active.title == "Sheet"
     # Out-of-range index raises IndexError
     import pytest
+
     with pytest.raises(IndexError):
         wb.active = 5
     with pytest.raises(IndexError):
@@ -154,11 +163,12 @@ def test_active_after_remove():
 
 # --- Feature 2: Workbook.__iter__ ---
 
+
 def test_iter_workbook():
     """Iterating over a workbook yields its worksheets."""
     wb = Workbook()
-    ws2 = wb.create_sheet("Second")
-    ws3 = wb.create_sheet("Third")
+    wb.create_sheet("Second")
+    wb.create_sheet("Third")
     sheets = list(wb)
     assert len(sheets) == 3
     assert sheets[0].title == "Sheet"
@@ -170,6 +180,7 @@ def test_iter_workbook():
 
 
 # --- Feature 3: Workbook.__len__ ---
+
 
 def test_len_workbook():
     """len(wb) returns the number of worksheets."""
@@ -185,6 +196,7 @@ def test_len_workbook():
 
 # --- Feature 4: Sheet title uniqueness ---
 
+
 def test_duplicate_title_auto_rename():
     """create_sheet with an existing title auto-renames with a number suffix."""
     wb = Workbook()
@@ -198,6 +210,7 @@ def test_duplicate_title_auto_rename():
 def test_title_setter_rejects_duplicate():
     """Renaming a worksheet title to an existing name raises ValueError."""
     import pytest
+
     wb = Workbook()
     ws2 = wb.create_sheet("Second")
     with pytest.raises(ValueError, match="already exists"):
@@ -208,9 +221,9 @@ def test_create_sheet_unique_titles():
     """Creating many sheets with the same base name produces unique titles."""
     wb = Workbook()
     # Default sheet is "Sheet"
-    ws2 = wb.create_sheet("Sheet")
-    ws3 = wb.create_sheet("Sheet")
-    ws4 = wb.create_sheet("Sheet")
+    wb.create_sheet("Sheet")
+    wb.create_sheet("Sheet")
+    wb.create_sheet("Sheet")
     assert wb.sheetnames == ["Sheet", "Sheet1", "Sheet2", "Sheet3"]
     # All titles unique
     assert len(set(wb.sheetnames)) == len(wb.sheetnames)

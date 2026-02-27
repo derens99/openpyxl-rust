@@ -1,9 +1,11 @@
 # tests/test_compat.py
 """Read back files written by openpyxl_rust using openpyxl to verify correctness."""
+
 import os
 import tempfile
 
 import openpyxl as real_openpyxl
+
 from openpyxl_rust import Workbook
 from openpyxl_rust.styles import Font
 

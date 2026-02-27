@@ -10,6 +10,6 @@ class Series:
     """
 
     def __init__(self, values=None, categories=None, title=None):
-        self.values = values          # Reference
+        self.values = values  # Reference
         self.categories = categories  # Reference or None
-        self.title = title            # str or None
+        self.title = title  # str or None

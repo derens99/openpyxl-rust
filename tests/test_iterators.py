@@ -1,4 +1,4 @@
-from openpyxl_rust import Workbook, Cell
+from openpyxl_rust import Cell, Workbook
 
 
 def test_iter_rows_basic():
