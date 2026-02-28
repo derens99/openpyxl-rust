@@ -7,6 +7,7 @@ pub(crate) enum CellData {
     Boolean(bool),
     Formula(String),
     DateTime(f64, u8), // (serial, kind: 0=date, 1=time, 2=datetime)
+    RichText(String),   // JSON-serialized rich text segments
     Empty,
 }
 
@@ -42,6 +43,8 @@ pub(crate) struct CellFormat {
     pub(crate) border_diagonal_color: Option<String>,
     pub(crate) border_diagonal_up: bool,
     pub(crate) border_diagonal_down: bool,
+    pub(crate) protection_locked: Option<bool>,
+    pub(crate) protection_hidden: Option<bool>,
 }
 
 #[derive(Clone, Debug)]
@@ -62,6 +65,7 @@ pub(crate) struct SheetData {
     pub(crate) hyperlinks: Vec<(u32, u16, String, Option<String>, Option<String>)>, // (row, col, url, text, tooltip)
     pub(crate) notes: Vec<(u32, u16, String, Option<String>)>, // (row, col, text, author)
     pub(crate) autofilter: Option<(u32, u16, u32, u16)>,       // (r1, c1, r2, c2) 0-based
+    pub(crate) autofilter_columns: Vec<String>,  // JSON-serialized per-column filters
     pub(crate) protection_json: Option<String>,
     pub(crate) page_setup_json: Option<String>,
     #[allow(clippy::type_complexity)]
@@ -99,6 +103,7 @@ impl SheetData {
             hyperlinks: Vec::new(),
             notes: Vec::new(),
             autofilter: None,
+            autofilter_columns: Vec::new(),
             protection_json: None,
             page_setup_json: None,
             images: Vec::new(),

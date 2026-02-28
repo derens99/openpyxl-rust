@@ -234,6 +234,27 @@ impl RustWorkbook {
         Ok(())
     }
 
+    fn set_cell_rich_text(&mut self, sheet: usize, row: u32, col: u16, json: String) -> PyResult<()> {
+        let sd = self
+            .sheets
+            .get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        let key = (row, col);
+        if let Some(cv) = sd.cells.get_mut(&key) {
+            cv.value = CellData::RichText(json);
+        } else {
+            sd.cells.insert(
+                key,
+                CellValue {
+                    value: CellData::RichText(json),
+                    format: CellFormat::default(),
+                },
+            );
+        }
+        sd.track_cell(row, col);
+        Ok(())
+    }
+
     fn get_cell_value(
         &self,
         py: Python<'_>,
@@ -261,6 +282,14 @@ impl RustWorkbook {
                     Ok(f.as_str().into_pyobject(py).unwrap().into_any().unbind())
                 }
                 CellData::DateTime(serial, kind) => datetime_to_py(py, *serial, *kind),
+                CellData::RichText(ref json) => {
+                    // Return plain text concatenation for display
+                    let segments: Vec<serde_json::Value> = serde_json::from_str(json).unwrap_or_default();
+                    let text: String = segments.iter()
+                        .filter_map(|s| s.get("text").and_then(|t| t.as_str()))
+                        .collect();
+                    Ok(text.as_str().into_pyobject(py).unwrap().into_any().unbind())
+                }
                 CellData::Empty => Ok(py.None()),
             },
             None => Ok(py.None()),
@@ -349,6 +378,15 @@ impl RustWorkbook {
             .get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
         sd.autofilter = Some((r1, c1, r2, c2));
+        Ok(())
+    }
+
+    fn add_autofilter_column(&mut self, sheet: usize, json: String) -> PyResult<()> {
+        let sd = self
+            .sheets
+            .get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.autofilter_columns.push(json);
         Ok(())
     }
 
@@ -675,6 +713,29 @@ impl RustWorkbook {
         Ok(())
     }
 
+    fn set_cell_protection(
+        &mut self,
+        sheet: usize,
+        row: u32,
+        col: u16,
+        locked: Option<bool>,
+        hidden: Option<bool>,
+    ) -> PyResult<()> {
+        let sd = self
+            .sheets
+            .get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        let key = (row, col);
+        let cv = sd.cells.entry(key).or_insert_with(|| CellValue {
+            value: CellData::Empty,
+            format: CellFormat::default(),
+        });
+        cv.format.protection_locked = locked;
+        cv.format.protection_hidden = hidden;
+        sd.track_cell(row, col);
+        Ok(())
+    }
+
     fn set_cell_number_format(
         &mut self,
         sheet: usize,
@@ -773,6 +834,13 @@ impl RustWorkbook {
                             f.as_str().into_pyobject(py).unwrap().into_any().unbind()
                         }
                         CellData::DateTime(s, k) => datetime_to_py(py, *s, *k)?,
+                        CellData::RichText(ref json) => {
+                            let segments: Vec<serde_json::Value> = serde_json::from_str(json).unwrap_or_default();
+                            let text: String = segments.iter()
+                                .filter_map(|s| s.get("text").and_then(|t| t.as_str()))
+                                .collect();
+                            text.as_str().into_pyobject(py).unwrap().into_any().unbind()
+                        }
                         CellData::Empty => py.None(),
                     },
                     None => py.None(),

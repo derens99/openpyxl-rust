@@ -2,5 +2,6 @@ from openpyxl_rust.styles.alignment import Alignment
 from openpyxl_rust.styles.borders import Border, Side
 from openpyxl_rust.styles.fills import PatternFill
 from openpyxl_rust.styles.fonts import Font
+from openpyxl_rust.styles.protection import Protection
 
-__all__ = ["Alignment", "Border", "Font", "PatternFill", "Side"]
+__all__ = ["Alignment", "Border", "Font", "PatternFill", "Protection", "Side"]

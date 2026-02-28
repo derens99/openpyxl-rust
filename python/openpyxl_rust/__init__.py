@@ -1,4 +1,5 @@
 from openpyxl_rust.cell import Cell
+from openpyxl_rust.rich_text import CellRichText, TextBlock
 from openpyxl_rust.chart import (
     AreaChart,
     AreaChart3D,
@@ -17,12 +18,13 @@ from openpyxl_rust.chart import (
 )
 from openpyxl_rust.comments import Comment
 from openpyxl_rust.datavalidation import DataValidation
-from openpyxl_rust.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule, FormulaRule, IconSetRule
+from openpyxl_rust.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule, DuplicateRule, FormulaRule, IconSetRule, TextRule, Top10Rule
 from openpyxl_rust.image import Image
 from openpyxl_rust.page import PageMargins, PrintOptions, PrintPageSetup
 from openpyxl_rust.page_break import Break, BreakList
 from openpyxl_rust.properties import DocumentProperties
 from openpyxl_rust.protection import SheetProtection
+from openpyxl_rust.styles.protection import Protection
 from openpyxl_rust.table import Table, TableColumn, TableStyleInfo
 from openpyxl_rust.workbook import DefinedName, Workbook
 from openpyxl_rust.worksheet import Worksheet
@@ -108,6 +110,7 @@ __all__ = [
     "BarChart",
     "BarChart3D",
     "Cell",
+    "CellRichText",
     "CellIsRule",
     "ColorScaleRule",
     "Comment",
@@ -118,8 +121,11 @@ __all__ = [
     "DefinedName",
     "DocumentProperties",
     "DoughnutChart",
+    "DuplicateRule",
     "FormulaRule",
     "IconSetRule",
+    "TextRule",
+    "Top10Rule",
     "Image",
     "LineChart",
     "LineChart3D",
@@ -128,6 +134,7 @@ __all__ = [
     "PieChart3D",
     "PrintOptions",
     "PrintPageSetup",
+    "Protection",
     "RadarChart",
     "Reference",
     "ScatterChart",
@@ -137,6 +144,7 @@ __all__ = [
     "Table",
     "TableColumn",
     "TableStyleInfo",
+    "TextBlock",
     "Workbook",
     "Worksheet",
     "load_workbook",

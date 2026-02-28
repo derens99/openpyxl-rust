@@ -13,9 +13,10 @@ from openpyxl_rust.cell import (
     _underline_to_u8,
     _vert_align_to_u8,
 )
-from openpyxl_rust.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule, FormulaRule, IconSetRule
+from openpyxl_rust.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule, DuplicateRule, FormulaRule, IconSetRule, TextRule, Top10Rule
 from openpyxl_rust.page import PageMargins, PrintOptions, PrintPageSetup
 from openpyxl_rust.page_break import BreakList
+from openpyxl_rust.header_footer import HeaderFooter
 from openpyxl_rust.protection import SheetProtection
 
 
@@ -75,6 +76,7 @@ class _RowDimensionsDict:
 class _AutoFilter:
     def __init__(self):
         self._ref = None
+        self._filter_columns = []
 
     @property
     def ref(self):
@@ -83,6 +85,10 @@ class _AutoFilter:
     @ref.setter
     def ref(self, value):
         self._ref = value
+
+    def add_filter_column(self, col_id, vals, blank=False):
+        """Add a filter for a column. col_id is 0-based column index."""
+        self._filter_columns.append({"col": col_id, "values": list(vals)})
 
 
 class _ConditionalFormattingList:
@@ -129,6 +135,8 @@ class Worksheet:
         self._autofit = False
         self.row_breaks = BreakList()
         self.col_breaks = BreakList()
+        self.oddHeader = HeaderFooter()
+        self.oddFooter = HeaderFooter()
 
         if workbook is not None and sheet_idx is not None:
             workbook._rust_wb.set_sheet_title(sheet_idx, title)
@@ -245,10 +253,16 @@ class Worksheet:
         elif value is None:
             wb.set_cell_empty(idx, r0, c0)
         else:
-            raise TypeError(
-                f"Unsupported cell value type: {type(value).__name__}. "
-                f"Supported types: str, int, float, bool, datetime, date, time, None"
-            )
+            # Check for CellRichText (lazy import to avoid circular deps)
+            from openpyxl_rust.rich_text import CellRichText
+            if isinstance(value, CellRichText):
+                import json as _json
+                wb.set_cell_rich_text(idx, r0, c0, _json.dumps(value._to_json_segments()))
+            else:
+                raise TypeError(
+                    f"Unsupported cell value type: {type(value).__name__}. "
+                    f"Supported types: str, int, float, bool, datetime, date, time, None, CellRichText"
+                )
 
     # ---- Core cell() method ----
 
@@ -670,6 +684,13 @@ class Worksheet:
                     bool(b.diagonalDown),
                 )
 
+            if cell.protection is not None:
+                wb.set_cell_protection(
+                    idx, r0, c0,
+                    cell.protection.locked if cell.protection.locked is not None else None,
+                    cell.protection.hidden if cell.protection.hidden else None,
+                )
+
             if cell.hyperlink is not None:
                 url = cell.hyperlink
                 text = None
@@ -762,6 +783,10 @@ class Worksheet:
             r2, c2 = _parse_cell_ref(parts[1])
             wb.set_autofilter(idx, r1 - 1, c1 - 1, r2 - 1, c2 - 1)
 
+        # Autofilter column filters
+        for fc in self.auto_filter._filter_columns:
+            wb.add_autofilter_column(idx, json.dumps(fc))
+
         # Protection
         if self.protection.sheet:
             prot_data = {
@@ -817,6 +842,13 @@ class Worksheet:
             page_data["gridlines"] = True
         if self.print_options.headings:
             page_data["headings"] = True
+        # Headers and footers
+        header_str = self.oddHeader._build_format_string()
+        if header_str:
+            page_data["header"] = header_str
+        footer_str = self.oddFooter._build_format_string()
+        if footer_str:
+            page_data["footer"] = footer_str
         if page_data:
             wb.set_page_setup(idx, json.dumps(page_data))
 
@@ -951,7 +983,32 @@ class Worksheet:
                     s_data["title"] = s.title.resolve()
                 else:
                     s_data["title"] = str(s.title)
+
+            # Trendline
+            if hasattr(s, 'trendline') and s.trendline is not None:
+                tl = s.trendline
+                s_data["trendline"] = {
+                    "type": tl.trendlineType,
+                    "display_equation": getattr(tl, 'displayEquation', False),
+                    "display_r_squared": getattr(tl, 'displayRSqr', False),
+                }
+
+            # Data labels
+            if hasattr(s, 'dLbls') and s.dLbls is not None:
+                dl = s.dLbls
+                s_data["data_labels"] = {
+                    "show_value": getattr(dl, 'showVal', False),
+                    "show_category": getattr(dl, 'showCatName', False),
+                    "show_series": getattr(dl, 'showSerName', False),
+                }
+
             series_list.append(s_data)
+
+        # Legend handling: support both bool and ChartLegend object
+        if hasattr(chart.legend, '_hidden') and chart.legend._hidden:
+            legend_val = False
+        else:
+            legend_val = bool(chart.legend)
 
         data = {
             "type": chart_type,
@@ -959,9 +1016,13 @@ class Worksheet:
             "anchor_col": c - 1,
             "width": width_px,
             "height": height_px,
-            "legend": chart.legend,
+            "legend": legend_val,
             "series": series_list,
         }
+
+        # Legend position
+        if hasattr(chart.legend, 'position') and chart.legend.position:
+            data["legend_position"] = chart.legend.position
         if chart.title is not None:
             data["title"] = str(chart.title)
         if chart.x_axis_title is not None:
@@ -1080,6 +1141,41 @@ class Worksheet:
                 "range": range_string,
                 "formula": formula_list[0] if formula_list else "",
                 "stop_if_true": bool(rule.stopIfTrue),
+            }
+            fmt = self._serialize_rule_format(rule)
+            if fmt:
+                data["format"] = fmt
+            return json.dumps(data)
+
+        elif isinstance(rule, Top10Rule):
+            data = {
+                "rule_type": "top10",
+                "range": range_string,
+                "rank": rule.rank,
+                "percent": rule.percent,
+                "bottom": rule.bottom,
+            }
+            fmt = self._serialize_rule_format(rule)
+            if fmt:
+                data["format"] = fmt
+            return json.dumps(data)
+
+        elif isinstance(rule, DuplicateRule):
+            data = {
+                "rule_type": "duplicate",
+                "range": range_string,
+            }
+            fmt = self._serialize_rule_format(rule)
+            if fmt:
+                data["format"] = fmt
+            return json.dumps(data)
+
+        elif isinstance(rule, TextRule):
+            data = {
+                "rule_type": "text",
+                "range": range_string,
+                "operator": rule.operator,
+                "text": rule.text,
             }
             fmt = self._serialize_rule_format(rule)
             if fmt:

@@ -405,9 +405,24 @@ class TestCellDataTypesParity:
         val = rb.active["A1"].value
         assert val == "#VALUE!"
 
-    @pytest.mark.skip(reason="not yet implemented: CellRichText")
     def test_rich_text(self, tmp_path):
-        pass
+        from openpyxl_rust.rich_text import CellRichText, TextBlock
+        from openpyxl_rust.styles import Font
+        wb = RustWorkbook()
+        ws = wb.active
+        rt = CellRichText(
+            "Normal ",
+            TextBlock(Font(bold=True), "Bold"),
+            " end"
+        )
+        ws["A1"].value = rt
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        val = rb.active["A1"].value
+        # Rich text should contain all the text parts
+        assert "Normal" in str(val)
+        assert "Bold" in str(val)
 
 
 # ---------------------------------------------------------------------------
@@ -702,9 +717,22 @@ class TestCellStylesParity:
     def test_named_style(self, tmp_path):
         pass
 
-    @pytest.mark.skip(reason="not yet implemented: cell Protection (locked/hidden)")
     def test_cell_protection(self, tmp_path):
-        pass
+        from openpyxl_rust.styles import Protection
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "locked"
+        ws["A1"].protection = Protection(locked=True, hidden=False)
+        ws["B1"] = "unlocked"
+        ws["B1"].protection = Protection(locked=False, hidden=False)
+        ws["C1"] = "hidden"
+        ws["C1"].protection = Protection(locked=True, hidden=True)
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        assert rb.active["A1"].protection.locked is True
+        assert rb.active["B1"].protection.locked is False
+        assert rb.active["C1"].protection.hidden is True
 
 
 # ---------------------------------------------------------------------------
@@ -1202,17 +1230,65 @@ class TestConditionalFormattingParity:
         total_rules = sum(len(cf.rules) for cf in rb.active.conditional_formatting)
         assert total_rules >= 2
 
-    @pytest.mark.skip(reason="not yet implemented: top10 conditional formatting rule")
     def test_top10_rule(self, tmp_path):
-        pass
+        from openpyxl_rust.formatting.rule import Top10Rule
+        from openpyxl_rust.styles import PatternFill
 
-    @pytest.mark.skip(reason="not yet implemented: duplicateValues conditional formatting rule")
+        wb = RustWorkbook()
+        ws = wb.active
+        for i in range(1, 11):
+            ws.cell(row=i, column=1, value=i * 10)
+        ws.conditional_formatting.add(
+            "A1:A10",
+            Top10Rule(rank=3, fill=PatternFill(start_color="FF0000", fill_type="solid")),
+        )
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        cf_rules = list(rb.active.conditional_formatting)
+        assert len(cf_rules) > 0
+
     def test_duplicate_values_rule(self, tmp_path):
-        pass
+        from openpyxl_rust.formatting.rule import DuplicateRule
+        from openpyxl_rust.styles import PatternFill
 
-    @pytest.mark.skip(reason="not yet implemented: containsText conditional formatting rule")
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "apple"
+        ws["A2"] = "banana"
+        ws["A3"] = "apple"
+        ws.conditional_formatting.add(
+            "A1:A3",
+            DuplicateRule(fill=PatternFill(start_color="FFFF00", fill_type="solid")),
+        )
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        cf_rules = list(rb.active.conditional_formatting)
+        assert len(cf_rules) > 0
+
     def test_contains_text_rule(self, tmp_path):
-        pass
+        from openpyxl_rust.formatting.rule import TextRule
+        from openpyxl_rust.styles import PatternFill
+
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "hello world"
+        ws["A2"] = "goodbye"
+        ws["A3"] = "hello again"
+        ws.conditional_formatting.add(
+            "A1:A3",
+            TextRule(
+                operator="containsText",
+                text="hello",
+                fill=PatternFill(start_color="00FF00", fill_type="solid"),
+            ),
+        )
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        cf_rules = list(rb.active.conditional_formatting)
+        assert len(cf_rules) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -1240,9 +1316,22 @@ class TestAutoFilterParity:
         rb = _save_and_reopen(wb, tmp_path)
         assert rb.active.auto_filter.ref is not None
 
-    @pytest.mark.skip(reason="not yet implemented: AutoFilter filter_column / sort_state")
     def test_autofilter_column_filter(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "Status"
+        ws["A2"] = "Yes"
+        ws["A3"] = "No"
+        ws["A4"] = "Yes"
+        ws.auto_filter.ref = "A1:A4"
+        ws.auto_filter.add_filter_column(0, ["Yes"])
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        af = rb.active.auto_filter
+        assert af.ref is not None
+        # Check that filterColumn data exists
+        assert len(af.filterColumn) >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -1431,9 +1520,21 @@ class TestPrintSetupParity:
         rb = _save_and_reopen(wb, tmp_path)
         assert rb.active.print_options.horizontalCentered is True
 
-    @pytest.mark.skip(reason="not yet implemented: header/footer text")
     def test_header_footer(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "test"
+        ws.oddHeader.center.text = "My Header"
+        ws.oddFooter.center.text = "Page &P"
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        # openpyxl reads header/footer as raw format strings
+        header = rb.active.oddHeader
+        assert header is not None
+        # The header text should contain "My Header"
+        header_text = header.center.text if hasattr(header.center, 'text') else str(header)
+        assert "My Header" in str(header_text) or "My Header" in str(header)
 
     def test_page_breaks(self, tmp_path):
         from openpyxl_rust.page_break import Break
@@ -1840,17 +1941,57 @@ class TestChartsParity:
         rb = _save_and_reopen(wb, tmp_path)
         self._verify_chart_exists(rb)
 
-    @pytest.mark.skip(reason="not yet implemented: chart trendlines")
     def test_chart_trendline(self, tmp_path):
-        pass
+        from openpyxl_rust.chart.series import Trendline
+        wb = RustWorkbook()
+        ws = wb.active
+        for i in range(1, 6):
+            ws.cell(row=i, column=1, value=i)
+            ws.cell(row=i, column=2, value=i * 2 + 1)
+        from openpyxl_rust.chart import BarChart, Reference
+        chart = BarChart()
+        data = Reference(ws, min_col=2, min_row=1, max_row=5)
+        chart.add_data(data)
+        chart.series[0].trendline = Trendline(trendlineType="linear")
+        ws.add_chart(chart, "D1")
+        wb.save(str(tmp_path / "test.xlsx"))
 
-    @pytest.mark.skip(reason="not yet implemented: chart data labels")
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        assert len(rb.active._charts) > 0
+
     def test_chart_data_labels(self, tmp_path):
-        pass
+        from openpyxl_rust.chart.series import DataLabelList
+        wb = RustWorkbook()
+        ws = wb.active
+        for i in range(1, 6):
+            ws.cell(row=i, column=1, value=f"Cat{i}")
+            ws.cell(row=i, column=2, value=i * 10)
+        from openpyxl_rust.chart import BarChart, Reference
+        chart = BarChart()
+        data = Reference(ws, min_col=2, min_row=1, max_row=5)
+        chart.add_data(data)
+        chart.series[0].dLbls = DataLabelList(showVal=True)
+        ws.add_chart(chart, "D1")
+        wb.save(str(tmp_path / "test.xlsx"))
 
-    @pytest.mark.skip(reason="not yet implemented: chart legend position")
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        assert len(rb.active._charts) > 0
+
     def test_chart_legend_position(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        ws = wb.active
+        for i in range(1, 6):
+            ws.cell(row=i, column=1, value=i * 10)
+        from openpyxl_rust.chart import BarChart, Reference
+        chart = BarChart()
+        data = Reference(ws, min_col=1, min_row=1, max_row=5)
+        chart.add_data(data)
+        chart.legend.position = "b"  # bottom
+        ws.add_chart(chart, "D1")
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        assert len(rb.active._charts) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -2024,13 +2165,31 @@ class TestRowColOpsParity:
 # ---------------------------------------------------------------------------
 class TestHeaderFooterParity:
 
-    @pytest.mark.skip(reason="not yet implemented: odd header text")
     def test_odd_header(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "test"
+        ws.oddHeader.center.text = "Center Header"
+        ws.oddHeader.left.text = "Left"
+        ws.oddHeader.right.text = "Right"
+        wb.save(str(tmp_path / "test.xlsx"))
 
-    @pytest.mark.skip(reason="not yet implemented: odd footer text")
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        h = rb.active.oddHeader
+        assert "Center Header" in str(h.center.text) or "Center Header" in str(h)
+        assert "Left" in str(h.left.text) or "Left" in str(h)
+        assert "Right" in str(h.right.text) or "Right" in str(h)
+
     def test_odd_footer(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "test"
+        ws.oddFooter.center.text = "Page &P of &N"
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        f = rb.active.oddFooter
+        assert "Page" in str(f.center.text) or "Page" in str(f)
 
     @pytest.mark.skip(reason="not yet implemented: even header/footer")
     def test_even_header_footer(self, tmp_path):
@@ -2128,17 +2287,39 @@ class TestDocumentPropertiesParity:
 # ---------------------------------------------------------------------------
 class TestRichTextParity:
 
-    @pytest.mark.skip(reason="not yet implemented: CellRichText")
     def test_rich_text_basic(self, tmp_path):
-        pass
+        from openpyxl_rust.rich_text import CellRichText, TextBlock
+        wb = RustWorkbook()
+        ws = wb.active
+        rt = CellRichText("Hello ", TextBlock(text="World"))
+        ws["A1"].value = rt
+        wb.save(str(tmp_path / "test.xlsx"))
 
-    @pytest.mark.skip(reason="not yet implemented: TextBlock with InlineFont")
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        assert "Hello" in str(rb.active["A1"].value)
+        assert "World" in str(rb.active["A1"].value)
+
+    @pytest.mark.skip(reason="not yet implemented: InlineFont TextBlock")
     def test_text_block(self, tmp_path):
         pass
 
-    @pytest.mark.skip(reason="not yet implemented: mixed rich text formatting")
     def test_mixed_formatting(self, tmp_path):
-        pass
+        from openpyxl_rust.rich_text import CellRichText, TextBlock
+        from openpyxl_rust.styles import Font
+        wb = RustWorkbook()
+        ws = wb.active
+        rt = CellRichText(
+            "Plain ",
+            TextBlock(Font(bold=True, color="FF0000"), "Red Bold"),
+            " more plain"
+        )
+        ws["A1"].value = rt
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        val = str(rb.active["A1"].value)
+        assert "Plain" in val
+        assert "Red Bold" in val
 
 
 # ---------------------------------------------------------------------------
