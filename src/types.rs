@@ -70,6 +70,12 @@ pub(crate) struct SheetData {
     pub(crate) conditional_formats: Vec<String>,
     pub(crate) tables: Vec<String>,
     pub(crate) charts: Vec<String>,
+    pub(crate) visibility: u8,                // 0=visible, 1=hidden, 2=veryHidden
+    pub(crate) hidden_rows: Vec<u32>,         // 0-based row indices
+    pub(crate) hidden_cols: Vec<u16>,         // 0-based col indices
+    pub(crate) zoom: Option<u16>,
+    pub(crate) show_gridlines: Option<bool>,
+    pub(crate) autofit: bool,
     pub(crate) min_row: Option<u32>,
     pub(crate) max_row: Option<u32>,
     pub(crate) min_col: Option<u16>,
@@ -96,6 +102,12 @@ impl SheetData {
             conditional_formats: Vec::new(),
             tables: Vec::new(),
             charts: Vec::new(),
+            visibility: 0,
+            hidden_rows: Vec::new(),
+            hidden_cols: Vec::new(),
+            zoom: None,
+            show_gridlines: None,
+            autofit: false,
             min_row: None,
             max_row: None,
             min_col: None,

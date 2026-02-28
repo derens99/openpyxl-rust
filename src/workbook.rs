@@ -959,6 +959,48 @@ impl RustWorkbook {
         Ok(())
     }
 
+    fn set_sheet_visibility(&mut self, sheet: usize, state: u8) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.visibility = state;
+        Ok(())
+    }
+
+    fn set_row_hidden(&mut self, sheet: usize, row: u32) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.hidden_rows.push(row);
+        Ok(())
+    }
+
+    fn set_col_hidden(&mut self, sheet: usize, col: u16) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.hidden_cols.push(col);
+        Ok(())
+    }
+
+    fn set_zoom(&mut self, sheet: usize, zoom: u16) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.zoom = Some(zoom);
+        Ok(())
+    }
+
+    fn set_show_gridlines(&mut self, sheet: usize, show: bool) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.show_gridlines = Some(show);
+        Ok(())
+    }
+
+    fn set_autofit(&mut self, sheet: usize, enabled: bool) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.autofit = enabled;
+        Ok(())
+    }
+
     fn save(&self, py: Python<'_>, path: Option<&str>) -> PyResult<PyObject> {
         crate::save::save_workbook(&self.sheets, &self.defined_names, path, py)
     }

@@ -92,9 +92,42 @@ pub(crate) fn save_workbook(
             worksheet.set_row_height(row, height).map_err(xlsx_err)?;
         }
 
+        // Hidden rows
+        for &row in &sd.hidden_rows {
+            if !sd.row_heights.contains_key(&row) {
+                worksheet.set_row_height(row, 15.0).map_err(xlsx_err)?;
+            }
+            worksheet.set_row_hidden(row).map_err(xlsx_err)?;
+        }
+
+        // Hidden columns
+        for &col in &sd.hidden_cols {
+            if !sd.column_widths.contains_key(&col) {
+                worksheet.set_column_width(col, 8.43).map_err(xlsx_err)?;
+            }
+            worksheet.set_column_hidden(col).map_err(xlsx_err)?;
+        }
+
         // Freeze panes
         if let Some((row, col)) = sd.freeze_panes {
             worksheet.set_freeze_panes(row, col).map_err(xlsx_err)?;
+        }
+
+        // Sheet visibility
+        match sd.visibility {
+            1 => { worksheet.set_hidden(true); }
+            2 => { worksheet.set_very_hidden(true); }
+            _ => {}
+        }
+
+        // Zoom
+        if let Some(zoom) = sd.zoom {
+            worksheet.set_zoom(zoom);
+        }
+
+        // Gridlines
+        if let Some(show) = sd.show_gridlines {
+            worksheet.set_screen_gridlines(show);
         }
 
         // Merged cells
@@ -988,6 +1021,12 @@ pub(crate) fn save_workbook(
                 .add_table(r1, c1, r2, c2, &table)
                 .map_err(xlsx_err)?;
         }
+
+        // Auto-fit columns
+        if sd.autofit {
+            worksheet.autofit();
+        }
+
 
         // Charts
         for chart_json_str in &sd.charts {

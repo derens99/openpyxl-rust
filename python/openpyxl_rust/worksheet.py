@@ -33,11 +33,13 @@ def _parse_cell_ref(ref_str):
 class ColumnDimension:
     def __init__(self):
         self.width = None
+        self.hidden = False
 
 
 class RowDimension:
     def __init__(self):
         self.height = None
+        self.hidden = False
 
 
 class _ColumnDimensionsDict:
@@ -117,6 +119,10 @@ class Worksheet:
         self.conditional_formatting = _ConditionalFormattingList()
         self._tables = []
         self._charts = []
+        self._sheet_state = "visible"
+        self._zoom_scale = None
+        self._show_gridlines = True
+        self._autofit = False
 
         if workbook is not None and sheet_idx is not None:
             workbook._rust_wb.set_sheet_title(sheet_idx, title)
@@ -134,6 +140,28 @@ class Worksheet:
         self._title = value
         if self._workbook is not None and self._sheet_idx is not None:
             self._workbook._rust_wb.set_sheet_title(self._sheet_idx, value)
+
+    @property
+    def sheet_state(self):
+        return self._sheet_state
+
+    @sheet_state.setter
+    def sheet_state(self, value):
+        if value not in ('visible', 'hidden', 'veryHidden'):
+            raise ValueError(f"Invalid sheet state: {value}")
+        self._sheet_state = value
+
+    @property
+    def zoom(self):
+        return self._zoom_scale
+
+    @zoom.setter
+    def zoom(self, value):
+        self._zoom_scale = value
+
+    def auto_fit_columns(self):
+        """Auto-size all columns to fit their content."""
+        self._autofit = True
 
     # ---- Dimensions (from Rust, O(1)) ----
 
@@ -673,6 +701,34 @@ class Worksheet:
         if self.freeze_panes:
             r, c = _parse_cell_ref(self.freeze_panes)
             wb.set_freeze_panes(idx, r - 1, c - 1)
+
+        # Sheet visibility
+        if self._sheet_state != "visible":
+            state_map = {"hidden": 1, "veryHidden": 2}
+            wb.set_sheet_visibility(idx, state_map[self._sheet_state])
+
+        # Hidden rows
+        for row_num, dim in self.row_dimensions.items():
+            if dim.hidden:
+                wb.set_row_hidden(idx, row_num - 1)
+
+        # Hidden columns
+        for letter, dim in self.column_dimensions.items():
+            if dim.hidden:
+                _, col_idx = _parse_cell_ref(f"{letter}1")
+                wb.set_col_hidden(idx, col_idx - 1)
+
+        # Zoom
+        if self._zoom_scale is not None:
+            wb.set_zoom(idx, int(self._zoom_scale))
+
+        # Gridlines
+        if not self._show_gridlines:
+            wb.set_show_gridlines(idx, False)
+
+        # Auto-fit columns
+        if self._autofit:
+            wb.set_autofit(idx, True)
 
         # Autofilter
         if self.auto_filter._ref:
