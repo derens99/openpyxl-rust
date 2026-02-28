@@ -688,7 +688,7 @@ class Worksheet:
                 wb.set_cell_protection(
                     idx, r0, c0,
                     cell.protection.locked if cell.protection.locked is not None else None,
-                    cell.protection.hidden if cell.protection.hidden else None,
+                    cell.protection.hidden if cell.protection.hidden is not None else None,
                 )
 
             if cell.hyperlink is not None:
@@ -845,10 +845,10 @@ class Worksheet:
         # Headers and footers
         header_str = self.oddHeader._build_format_string()
         if header_str:
-            page_data["header"] = header_str
+            page_data["header_text"] = header_str
         footer_str = self.oddFooter._build_format_string()
         if footer_str:
-            page_data["footer"] = footer_str
+            page_data["footer_text"] = footer_str
         if page_data:
             wb.set_page_setup(idx, json.dumps(page_data))
 
@@ -985,7 +985,7 @@ class Worksheet:
                     s_data["title"] = str(s.title)
 
             # Trendline
-            if hasattr(s, 'trendline') and s.trendline is not None:
+            if s.trendline is not None:
                 tl = s.trendline
                 s_data["trendline"] = {
                     "type": tl.trendlineType,
@@ -994,7 +994,7 @@ class Worksheet:
                 }
 
             # Data labels
-            if hasattr(s, 'dLbls') and s.dLbls is not None:
+            if s.dLbls is not None:
                 dl = s.dLbls
                 s_data["data_labels"] = {
                     "show_value": getattr(dl, 'showVal', False),
@@ -1005,10 +1005,12 @@ class Worksheet:
             series_list.append(s_data)
 
         # Legend handling: support both bool and ChartLegend object
-        if hasattr(chart.legend, '_hidden') and chart.legend._hidden:
+        if isinstance(chart.legend, bool):
+            legend_val = chart.legend
+        elif chart.legend._hidden:
             legend_val = False
         else:
-            legend_val = bool(chart.legend)
+            legend_val = True
 
         data = {
             "type": chart_type,
@@ -1021,7 +1023,7 @@ class Worksheet:
         }
 
         # Legend position
-        if hasattr(chart.legend, 'position') and chart.legend.position:
+        if not isinstance(chart.legend, bool) and chart.legend.position:
             data["legend_position"] = chart.legend.position
         if chart.title is not None:
             data["title"] = str(chart.title)

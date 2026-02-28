@@ -462,10 +462,10 @@ pub(crate) fn save_workbook(
             }
 
             // Header/Footer
-            if let Some(header_str) = obj.get("header").and_then(|v| v.as_str()) {
+            if let Some(header_str) = obj.get("header_text").and_then(|v| v.as_str()) {
                 worksheet.set_header(header_str);
             }
-            if let Some(footer_str) = obj.get("footer").and_then(|v| v.as_str()) {
+            if let Some(footer_str) = obj.get("footer_text").and_then(|v| v.as_str()) {
                 worksheet.set_footer(footer_str);
             }
 

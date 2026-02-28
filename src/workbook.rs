@@ -2,6 +2,17 @@ use crate::types::*;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 
+/// Extract plain text from RichText JSON segments.
+fn rich_text_to_plain(json: &str) -> PyResult<String> {
+    let segments: Vec<serde_json::Value> = serde_json::from_str(json).map_err(|e| {
+        pyo3::exceptions::PyRuntimeError::new_err(format!("RichText JSON error: {}", e))
+    })?;
+    Ok(segments
+        .iter()
+        .filter_map(|s| s.get("text").and_then(|t| t.as_str()))
+        .collect())
+}
+
 /// Convert Excel serial number to (year, month, day) using inverse Julian Day algorithm.
 fn serial_to_date_parts(serial: f64) -> (i32, u32, u32) {
     let mut s = serial.floor() as i64;
@@ -283,11 +294,7 @@ impl RustWorkbook {
                 }
                 CellData::DateTime(serial, kind) => datetime_to_py(py, *serial, *kind),
                 CellData::RichText(ref json) => {
-                    // Return plain text concatenation for display
-                    let segments: Vec<serde_json::Value> = serde_json::from_str(json).unwrap_or_default();
-                    let text: String = segments.iter()
-                        .filter_map(|s| s.get("text").and_then(|t| t.as_str()))
-                        .collect();
+                    let text = rich_text_to_plain(json)?;
                     Ok(text.as_str().into_pyobject(py).unwrap().into_any().unbind())
                 }
                 CellData::Empty => Ok(py.None()),
@@ -835,10 +842,7 @@ impl RustWorkbook {
                         }
                         CellData::DateTime(s, k) => datetime_to_py(py, *s, *k)?,
                         CellData::RichText(ref json) => {
-                            let segments: Vec<serde_json::Value> = serde_json::from_str(json).unwrap_or_default();
-                            let text: String = segments.iter()
-                                .filter_map(|s| s.get("text").and_then(|t| t.as_str()))
-                                .collect();
+                            let text = rich_text_to_plain(json)?;
                             text.as_str().into_pyobject(py).unwrap().into_any().unbind()
                         }
                         CellData::Empty => py.None(),
