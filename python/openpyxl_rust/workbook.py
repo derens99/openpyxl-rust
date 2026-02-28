@@ -1,5 +1,7 @@
+import json
 import os
 
+from openpyxl_rust.properties import DocumentProperties
 from openpyxl_rust.worksheet import Worksheet
 
 
@@ -36,6 +38,7 @@ class Workbook:
         self._sheets = [Worksheet(title="Sheet", workbook=self, sheet_idx=0)]
         self._active_sheet_index = 0
         self.defined_names = _DefinedNames(self)
+        self.properties = DocumentProperties()
 
     @property
     def active(self):
@@ -117,6 +120,25 @@ class Workbook:
     def save(self, filename):
         for ws in self._sheets:
             ws._flush_metadata()
+
+        # Document properties
+        props = self.properties
+        props_data = {}
+        if props.title:
+            props_data["title"] = props.title
+        if props.creator:
+            props_data["creator"] = props.creator
+        if props.description:
+            props_data["description"] = props.description
+        if props.subject:
+            props_data["subject"] = props.subject
+        if props.keywords:
+            props_data["keywords"] = props.keywords
+        if props.category:
+            props_data["category"] = props.category
+        if props_data:
+            self._rust_wb.set_doc_properties(json.dumps(props_data))
+
         if isinstance(filename, (str, bytes, os.PathLike)):
             self._rust_wb.save(str(filename))
         else:

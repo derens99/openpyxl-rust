@@ -20,6 +20,8 @@ from openpyxl_rust.datavalidation import DataValidation
 from openpyxl_rust.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule, FormulaRule, IconSetRule
 from openpyxl_rust.image import Image
 from openpyxl_rust.page import PageMargins, PrintOptions, PrintPageSetup
+from openpyxl_rust.page_break import Break, BreakList
+from openpyxl_rust.properties import DocumentProperties
 from openpyxl_rust.protection import SheetProtection
 from openpyxl_rust.table import Table, TableColumn, TableStyleInfo
 from openpyxl_rust.workbook import DefinedName, Workbook
@@ -111,7 +113,10 @@ __all__ = [
     "Comment",
     "DataBarRule",
     "DataValidation",
+    "Break",
+    "BreakList",
     "DefinedName",
+    "DocumentProperties",
     "DoughnutChart",
     "FormulaRule",
     "IconSetRule",

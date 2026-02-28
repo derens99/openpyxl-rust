@@ -4,16 +4,46 @@ use crate::types::*;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use rust_xlsxwriter::{
-    Chart, ChartType, Format, Formula, Table, TableColumn, TableStyle, Workbook,
+    Chart, ChartType, DocProperties, Format, Formula, Table, TableColumn, TableStyle, Workbook,
 };
 
 pub(crate) fn save_workbook(
     sheets: &[SheetData],
     defined_names: &[(String, String)],
+    doc_properties_json: Option<&str>,
     path: Option<&str>,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
     let mut workbook = Workbook::new();
+
+    // Document properties
+    if let Some(json_str) = doc_properties_json {
+        let props: serde_json::Value = serde_json::from_str(json_str).map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("DocProperties JSON error: {}", e))
+        })?;
+        if let Some(obj) = props.as_object() {
+            let mut dp = DocProperties::new();
+            if let Some(v) = obj.get("title").and_then(|v| v.as_str()) {
+                dp = dp.set_title(v);
+            }
+            if let Some(v) = obj.get("creator").and_then(|v| v.as_str()) {
+                dp = dp.set_author(v);
+            }
+            if let Some(v) = obj.get("description").and_then(|v| v.as_str()) {
+                dp = dp.set_comment(v);
+            }
+            if let Some(v) = obj.get("subject").and_then(|v| v.as_str()) {
+                dp = dp.set_subject(v);
+            }
+            if let Some(v) = obj.get("keywords").and_then(|v| v.as_str()) {
+                dp = dp.set_keywords(v);
+            }
+            if let Some(v) = obj.get("category").and_then(|v| v.as_str()) {
+                dp = dp.set_category(v);
+            }
+            workbook.set_properties(&dp);
+        }
+    }
 
     for sd in sheets {
         let worksheet = workbook.add_worksheet();
@@ -106,6 +136,66 @@ pub(crate) fn save_workbook(
                 worksheet.set_column_width(col, 8.43).map_err(xlsx_err)?;
             }
             worksheet.set_column_hidden(col).map_err(xlsx_err)?;
+        }
+
+        // Page breaks
+        if !sd.row_breaks.is_empty() {
+            worksheet.set_page_breaks(&sd.row_breaks).map_err(xlsx_err)?;
+        }
+        if !sd.col_breaks.is_empty() {
+            let cols_u32: Vec<u32> = sd.col_breaks.iter().map(|&c| c as u32).collect();
+            worksheet.set_vertical_page_breaks(&cols_u32).map_err(xlsx_err)?;
+        }
+
+        // Row outline levels (grouping)
+        // Convert per-row outline levels to group_rows calls
+        if !sd.row_outline_levels.is_empty() {
+            let max_level = sd.row_outline_levels.iter().map(|&(_, l)| l).max().unwrap_or(0);
+            for level in 1..=max_level {
+                // Find all rows with outline_level >= this level
+                let mut rows_at_level: Vec<u32> = sd.row_outline_levels.iter()
+                    .filter(|&&(_, l)| l >= level)
+                    .map(|&(r, _)| r)
+                    .collect();
+                rows_at_level.sort();
+                rows_at_level.dedup();
+                // Group contiguous ranges
+                let mut i = 0;
+                while i < rows_at_level.len() {
+                    let start = rows_at_level[i];
+                    let mut end = start;
+                    while i + 1 < rows_at_level.len() && rows_at_level[i + 1] == end + 1 {
+                        i += 1;
+                        end = rows_at_level[i];
+                    }
+                    worksheet.group_rows(start, end).map_err(xlsx_err)?;
+                    i += 1;
+                }
+            }
+        }
+
+        // Column outline levels (grouping)
+        // Set individual column widths first to prevent rust_xlsxwriter from
+        // merging columns into a single <col> range (openpyxl needs separate entries)
+        if !sd.col_outline_levels.is_empty() {
+            for &(col, _) in &sd.col_outline_levels {
+                if !sd.column_widths.contains_key(&col) {
+                    worksheet.set_column_width(col, 8.43).map_err(xlsx_err)?;
+                }
+            }
+            let max_level = sd.col_outline_levels.iter().map(|&(_, l)| l).max().unwrap_or(0);
+            for level in 1..=max_level {
+                let mut cols_at_level: Vec<u16> = sd.col_outline_levels.iter()
+                    .filter(|&&(_, l)| l >= level)
+                    .map(|&(c, _)| c)
+                    .collect();
+                cols_at_level.sort();
+                cols_at_level.dedup();
+                // Group each column individually to ensure separate <col> entries
+                for &col in &cols_at_level {
+                    worksheet.group_columns(col, col).map_err(xlsx_err)?;
+                }
+            }
         }
 
         // Freeze panes

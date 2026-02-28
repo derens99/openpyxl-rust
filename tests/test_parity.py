@@ -121,9 +121,17 @@ class TestWorkbookParity:
         rb = real_openpyxl.load_workbook(buf)
         assert rb.active["A1"].value == "bytes"
 
-    @pytest.mark.skip(reason="not yet implemented: workbook properties (title, author)")
     def test_document_properties(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "test"
+        wb.properties.title = "Test Title"
+        wb.properties.creator = "Test Creator"
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        assert rb.properties.title == "Test Title"
+        assert rb.properties.creator == "Test Creator"
 
     @pytest.mark.skip(reason="not yet implemented: workbook protection")
     def test_workbook_protection(self, tmp_path):
@@ -770,9 +778,37 @@ class TestRowColumnDimensionsParity:
         assert rb.active.column_dimensions["B"].hidden is True
         assert not rb.active.column_dimensions["A"].hidden
 
-    @pytest.mark.skip(reason="not yet implemented: row/column outline_level (grouping)")
     def test_row_grouping(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "header"
+        ws["A2"] = "detail 1"
+        ws["A3"] = "detail 2"
+        ws.row_dimensions[2].outline_level = 1
+        ws.row_dimensions[3].outline_level = 1
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        assert rb.active.row_dimensions[2].outline_level == 1
+        assert rb.active.row_dimensions[3].outline_level == 1
+
+    def test_column_grouping(self, tmp_path):
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "main"
+        ws["B1"] = "sub 1"
+        ws["C1"] = "sub 2"
+        ws.column_dimensions["B"].outline_level = 1
+        ws.column_dimensions["C"].outline_level = 1
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        # openpyxl may store contiguous columns with identical properties
+        # as a single entry (e.g., "B" with min=2, max=3 covering B:C)
+        b_dim = rb.active.column_dimensions["B"]
+        assert b_dim.outline_level == 1
+        # Verify column C is covered by the range (max >= 3 means C is included)
+        assert b_dim.max >= 3  # B=2, C=3 in 1-based
 
     def test_column_auto_size(self, tmp_path):
         wb = RustWorkbook()
@@ -1399,9 +1435,18 @@ class TestPrintSetupParity:
     def test_header_footer(self, tmp_path):
         pass
 
-    @pytest.mark.skip(reason="not yet implemented: page breaks")
     def test_page_breaks(self, tmp_path):
-        pass
+        from openpyxl_rust.page_break import Break
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "page 1"
+        ws["A21"] = "page 2"
+        ws.row_breaks.append(Break(id=20))
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        row_break_ids = [b.id for b in rb.active.row_breaks.brk]
+        assert 20 in row_break_ids
 
 
 # ---------------------------------------------------------------------------
@@ -2001,13 +2046,31 @@ class TestHeaderFooterParity:
 # ---------------------------------------------------------------------------
 class TestPageBreaksParity:
 
-    @pytest.mark.skip(reason="not yet implemented: row page breaks")
     def test_row_break(self, tmp_path):
-        pass
+        from openpyxl_rust.page_break import Break
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "above break"
+        ws["A11"] = "below break"
+        ws.row_breaks.append(Break(id=10))
+        wb.save(str(tmp_path / "test.xlsx"))
 
-    @pytest.mark.skip(reason="not yet implemented: column page breaks")
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        row_break_ids = [b.id for b in rb.active.row_breaks.brk]
+        assert 10 in row_break_ids
+
     def test_col_break(self, tmp_path):
-        pass
+        from openpyxl_rust.page_break import Break
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "left of break"
+        ws["F1"] = "right of break"
+        ws.col_breaks.append(Break(id=5))
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        col_break_ids = [b.id for b in rb.active.col_breaks.brk]
+        assert 5 in col_break_ids
 
 
 # ---------------------------------------------------------------------------
@@ -2029,17 +2092,35 @@ class TestWorkbookProtectionParity:
 # ---------------------------------------------------------------------------
 class TestDocumentPropertiesParity:
 
-    @pytest.mark.skip(reason="not yet implemented: workbook title property")
     def test_title(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "test"
+        wb.properties.title = "My Workbook"
+        wb.save(str(tmp_path / "test.xlsx"))
 
-    @pytest.mark.skip(reason="not yet implemented: workbook author/creator property")
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        assert rb.properties.title == "My Workbook"
+
     def test_creator(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "test"
+        wb.properties.creator = "Test Author"
+        wb.save(str(tmp_path / "test.xlsx"))
 
-    @pytest.mark.skip(reason="not yet implemented: workbook description property")
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        assert rb.properties.creator == "Test Author"
+
     def test_description(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "test"
+        wb.properties.description = "A test workbook"
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        assert rb.properties.description == "A test workbook"
 
 
 # ---------------------------------------------------------------------------

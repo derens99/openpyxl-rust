@@ -64,6 +64,7 @@ fn datetime_to_py(py: Python<'_>, serial: f64, kind: u8) -> PyResult<PyObject> {
 pub(crate) struct RustWorkbook {
     pub(crate) sheets: Vec<SheetData>,
     pub(crate) defined_names: Vec<(String, String)>,
+    pub(crate) doc_properties_json: Option<String>,
 }
 
 #[pymethods]
@@ -73,6 +74,7 @@ impl RustWorkbook {
         RustWorkbook {
             sheets: vec![SheetData::new("Sheet".to_string())],
             defined_names: Vec::new(),
+            doc_properties_json: None,
         }
     }
 
@@ -1001,7 +1003,40 @@ impl RustWorkbook {
         Ok(())
     }
 
+    fn set_row_breaks(&mut self, sheet: usize, breaks: Vec<u32>) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.row_breaks = breaks;
+        Ok(())
+    }
+
+    fn set_col_breaks(&mut self, sheet: usize, breaks: Vec<u16>) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.col_breaks = breaks;
+        Ok(())
+    }
+
+    fn set_row_outline_level(&mut self, sheet: usize, row: u32, level: u8) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.row_outline_levels.push((row, level));
+        Ok(())
+    }
+
+    fn set_col_outline_level(&mut self, sheet: usize, col: u16, level: u8) -> PyResult<()> {
+        let sd = self.sheets.get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.col_outline_levels.push((col, level));
+        Ok(())
+    }
+
+    fn set_doc_properties(&mut self, json: String) -> PyResult<()> {
+        self.doc_properties_json = Some(json);
+        Ok(())
+    }
+
     fn save(&self, py: Python<'_>, path: Option<&str>) -> PyResult<PyObject> {
-        crate::save::save_workbook(&self.sheets, &self.defined_names, path, py)
+        crate::save::save_workbook(&self.sheets, &self.defined_names, self.doc_properties_json.as_deref(), path, py)
     }
 }

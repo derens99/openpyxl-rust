@@ -15,6 +15,7 @@ from openpyxl_rust.cell import (
 )
 from openpyxl_rust.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule, FormulaRule, IconSetRule
 from openpyxl_rust.page import PageMargins, PrintOptions, PrintPageSetup
+from openpyxl_rust.page_break import BreakList
 from openpyxl_rust.protection import SheetProtection
 
 
@@ -34,12 +35,15 @@ class ColumnDimension:
     def __init__(self):
         self.width = None
         self.hidden = False
+        self.outline_level = 0
+        self.bestFit = False
 
 
 class RowDimension:
     def __init__(self):
         self.height = None
         self.hidden = False
+        self.outline_level = 0
 
 
 class _ColumnDimensionsDict:
@@ -123,6 +127,8 @@ class Worksheet:
         self._zoom_scale = None
         self._show_gridlines = True
         self._autofit = False
+        self.row_breaks = BreakList()
+        self.col_breaks = BreakList()
 
         if workbook is not None and sheet_idx is not None:
             workbook._rust_wb.set_sheet_title(sheet_idx, title)
@@ -729,6 +735,25 @@ class Worksheet:
         # Auto-fit columns
         if self._autofit:
             wb.set_autofit(idx, True)
+
+        # Page breaks
+        if self.row_breaks:
+            breaks = [brk.id for brk in self.row_breaks]
+            wb.set_row_breaks(idx, breaks)
+        if self.col_breaks:
+            breaks = [brk.id for brk in self.col_breaks]
+            wb.set_col_breaks(idx, breaks)
+
+        # Row outline levels
+        for row_num, dim in self.row_dimensions.items():
+            if dim.outline_level and dim.outline_level > 0:
+                wb.set_row_outline_level(idx, row_num - 1, dim.outline_level)
+
+        # Column outline levels
+        for letter, dim in self.column_dimensions.items():
+            if dim.outline_level and dim.outline_level > 0:
+                _, col_idx = _parse_cell_ref(f"{letter}1")
+                wb.set_col_outline_level(idx, col_idx - 1, dim.outline_level)
 
         # Autofilter
         if self.auto_filter._ref:

@@ -76,6 +76,10 @@ pub(crate) struct SheetData {
     pub(crate) zoom: Option<u16>,
     pub(crate) show_gridlines: Option<bool>,
     pub(crate) autofit: bool,
+    pub(crate) row_breaks: Vec<u32>,
+    pub(crate) col_breaks: Vec<u16>,
+    pub(crate) row_outline_levels: Vec<(u32, u8)>,  // (row, level)
+    pub(crate) col_outline_levels: Vec<(u16, u8)>,  // (col, level)
     pub(crate) min_row: Option<u32>,
     pub(crate) max_row: Option<u32>,
     pub(crate) min_col: Option<u16>,
@@ -108,6 +112,10 @@ impl SheetData {
             zoom: None,
             show_gridlines: None,
             autofit: false,
+            row_breaks: Vec::new(),
+            col_breaks: Vec::new(),
+            row_outline_levels: Vec::new(),
+            col_outline_levels: Vec::new(),
             min_row: None,
             max_row: None,
             min_col: None,
