@@ -724,7 +724,7 @@ class Worksheet:
 
         # Gridlines
         if not self._show_gridlines:
-            wb.set_show_gridlines(idx, False)
+            wb.set_show_gridlines(idx, self._show_gridlines)
 
         # Auto-fit columns
         if self._autofit:
