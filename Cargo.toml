@@ -1,14 +1,24 @@
 [package]
 name = "openpyxl-rust"
-version = "1.0.1"
+version = "1.1.0-rc.2"
 edition = "2021"
+rust-version = "1.74"
+license = "MIT"
 
 [lib]
 name = "_openpyxl_rust"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.24", features = ["extension-module"] }
+pyo3 = { version = "0.24", features = ["extension-module", "abi3-py310"] }
 rust_xlsxwriter = "0.93"
 calamine = "0.26"
 serde_json = "1"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+needless_pass_by_value = "allow"       # PyO3 method signatures require owned types
+unused_self = "allow"                  # PyO3 #[pymethods] need &self even if unused
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "warn"

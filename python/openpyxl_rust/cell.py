@@ -109,6 +109,7 @@ class Cell:
         "_font",
         "_hyperlink",
         "_number_format",
+        "_protection",
         "_row",
         "_value",
         "_ws",
@@ -135,6 +136,7 @@ class Cell:
         self._fill = None
         self._hyperlink = None
         self._comment = None
+        self._protection = None
         if value is not None:
             if worksheet is not None and worksheet._workbook is not None:
                 worksheet._set_cell_value(row, column, value)
@@ -252,6 +254,15 @@ class Cell:
     @comment.setter
     def comment(self, val):
         self._comment = val
+        self._mark_formatted()
+
+    @property
+    def protection(self):
+        return self._protection
+
+    @protection.setter
+    def protection(self, val):
+        self._protection = val
         self._mark_formatted()
 
     def _mark_formatted(self):

@@ -1,16 +1,23 @@
 from collections.abc import Generator, Iterable
-from typing import Any, Optional, overload
+from typing import Any, overload
 
 from openpyxl_rust.cell import Cell
+from openpyxl_rust.header_footer import HeaderFooter
 from openpyxl_rust.page import PageMargins, PrintOptions, PrintPageSetup
+from openpyxl_rust.page_break import BreakList
 from openpyxl_rust.protection import SheetProtection
 
 class ColumnDimension:
-    width: Optional[float]
+    width: float | None
+    hidden: bool
+    outline_level: int
+    bestFit: bool
     def __init__(self) -> None: ...
 
 class RowDimension:
-    height: Optional[float]
+    height: float | None
+    hidden: bool
+    outline_level: int
     def __init__(self) -> None: ...
 
 class _ColumnDimensionsDict:
@@ -26,16 +33,16 @@ class _RowDimensionsDict:
 class _AutoFilter:
     def __init__(self) -> None: ...
     @property
-    def ref(self) -> Optional[str]: ...
+    def ref(self) -> str | None: ...
     @ref.setter
-    def ref(self, value: Optional[str]) -> None: ...
+    def ref(self, value: str | None) -> None: ...
+    def add_filter_column(self, col_id: int, vals: Iterable[str], blank: bool = False) -> None: ...
 
 class _ConditionalFormattingList:
     def __init__(self) -> None: ...
     def add(self, range_string: str, rule: Any) -> None: ...
 
 class Worksheet:
-    # Class constants
     ORIENTATION_PORTRAIT: str
     ORIENTATION_LANDSCAPE: str
     PAPERSIZE_LETTER: int
@@ -43,55 +50,67 @@ class Worksheet:
     PAPERSIZE_A4: int
     PAPERSIZE_A5: int
 
-    # Instance attributes
     column_dimensions: _ColumnDimensionsDict
     row_dimensions: _RowDimensionsDict
-    freeze_panes: Optional[str]
+    freeze_panes: str | None
     merged_cell_ranges: list[tuple[str, str]]
     auto_filter: _AutoFilter
     protection: SheetProtection
     page_setup: PrintPageSetup
     page_margins: PageMargins
     print_options: PrintOptions
-    print_area: Optional[str]
-    print_title_rows: Optional[str]
-    print_title_cols: Optional[str]
+    print_area: str | None
+    print_title_rows: str | None
+    print_title_cols: str | None
     conditional_formatting: _ConditionalFormattingList
+    row_breaks: BreakList
+    col_breaks: BreakList
+    oddHeader: HeaderFooter
+    oddFooter: HeaderFooter
 
     def __init__(
         self,
         title: str = "Sheet",
-        workbook: Optional[Any] = None,
-        sheet_idx: Optional[int] = None,
+        workbook: Any | None = None,
+        sheet_idx: int | None = None,
     ) -> None: ...
     @property
     def title(self) -> str: ...
     @title.setter
     def title(self, value: str) -> None: ...
     @property
-    def min_row(self) -> Optional[int]: ...
+    def sheet_state(self) -> str: ...
+    @sheet_state.setter
+    def sheet_state(self, value: str) -> None: ...
     @property
-    def max_row(self) -> Optional[int]: ...
+    def zoom(self) -> int | None: ...
+    @zoom.setter
+    def zoom(self, value: int | None) -> None: ...
+    def auto_fit_columns(self) -> None: ...
     @property
-    def min_column(self) -> Optional[int]: ...
+    def min_row(self) -> int | None: ...
     @property
-    def max_column(self) -> Optional[int]: ...
+    def max_row(self) -> int | None: ...
+    @property
+    def min_column(self) -> int | None: ...
+    @property
+    def max_column(self) -> int | None: ...
     @property
     def dimensions(self) -> str: ...
     def iter_rows(
         self,
-        min_row: Optional[int] = None,
-        max_row: Optional[int] = None,
-        min_col: Optional[int] = None,
-        max_col: Optional[int] = None,
+        min_row: int | None = None,
+        max_row: int | None = None,
+        min_col: int | None = None,
+        max_col: int | None = None,
         values_only: bool = False,
     ) -> Generator[tuple[Any, ...]]: ...
     def iter_cols(
         self,
-        min_col: Optional[int] = None,
-        max_col: Optional[int] = None,
-        min_row: Optional[int] = None,
-        max_row: Optional[int] = None,
+        min_col: int | None = None,
+        max_col: int | None = None,
+        min_row: int | None = None,
+        max_row: int | None = None,
         values_only: bool = False,
     ) -> Generator[tuple[Any, ...]]: ...
     @property
@@ -110,5 +129,7 @@ class Worksheet:
     def delete_rows(self, idx: int, amount: int = 1) -> None: ...
     def insert_cols(self, idx: int, amount: int = 1) -> None: ...
     def delete_cols(self, idx: int, amount: int = 1) -> None: ...
-    def add_image(self, img: Any, anchor: Optional[str] = None) -> None: ...
+    def add_image(self, img: Any, anchor: str | None = None) -> None: ...
     def add_data_validation(self, dv: Any) -> None: ...
+    def add_table(self, table: Any) -> None: ...
+    def add_chart(self, chart: Any, anchor: str | None = None) -> None: ...

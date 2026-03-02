@@ -71,3 +71,30 @@ class FormulaRule:
         self.font = font
         self.border = border
         self.fill = fill
+
+
+class Top10Rule:
+    def __init__(self, rank=10, percent=False, bottom=False, font=None, border=None, fill=None):
+        self.rank = rank
+        self.percent = percent
+        self.bottom = bottom
+        self.font = font
+        self.border = border
+        self.fill = fill
+
+
+class DuplicateRule:
+    def __init__(self, font=None, border=None, fill=None):
+        self.font = font
+        self.border = border
+        self.fill = fill
+
+
+class TextRule:
+    def __init__(self, operator=None, text=None, font=None, border=None, fill=None):
+        """operator: 'containsText', 'notContains', 'beginsWith', 'endsWith'"""
+        self.operator = operator or "containsText"
+        self.text = text or ""
+        self.font = font
+        self.border = border
+        self.fill = fill

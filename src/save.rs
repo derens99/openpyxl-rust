@@ -4,16 +4,46 @@ use crate::types::*;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use rust_xlsxwriter::{
-    Chart, ChartType, Format, Formula, Table, TableColumn, TableStyle, Workbook,
+    Chart, ChartType, DocProperties, Format, Formula, Table, TableColumn, TableStyle, Workbook,
 };
 
 pub(crate) fn save_workbook(
     sheets: &[SheetData],
     defined_names: &[(String, String)],
+    doc_properties_json: Option<&str>,
     path: Option<&str>,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
     let mut workbook = Workbook::new();
+
+    // Document properties
+    if let Some(json_str) = doc_properties_json {
+        let props: serde_json::Value = serde_json::from_str(json_str).map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("DocProperties JSON error: {}", e))
+        })?;
+        if let Some(obj) = props.as_object() {
+            let mut dp = DocProperties::new();
+            if let Some(v) = obj.get("title").and_then(|v| v.as_str()) {
+                dp = dp.set_title(v);
+            }
+            if let Some(v) = obj.get("creator").and_then(|v| v.as_str()) {
+                dp = dp.set_author(v);
+            }
+            if let Some(v) = obj.get("description").and_then(|v| v.as_str()) {
+                dp = dp.set_comment(v);
+            }
+            if let Some(v) = obj.get("subject").and_then(|v| v.as_str()) {
+                dp = dp.set_subject(v);
+            }
+            if let Some(v) = obj.get("keywords").and_then(|v| v.as_str()) {
+                dp = dp.set_keywords(v);
+            }
+            if let Some(v) = obj.get("category").and_then(|v| v.as_str()) {
+                dp = dp.set_category(v);
+            }
+            workbook.set_properties(&dp);
+        }
+    }
 
     for sd in sheets {
         let worksheet = workbook.add_worksheet();
@@ -21,31 +51,37 @@ pub(crate) fn save_workbook(
 
         // Write cells
         for (&(row, col), cv) in &sd.cells {
-            let (fmt, has_format) = cell_format_to_xlsx_format(&cv.format);
+            // Fast path: skip Format construction entirely for unformatted cells
+            let fmt_opt = if cv.format.has_format {
+                Some(cell_format_to_xlsx_format(&cv.format).0)
+            } else {
+                None
+            };
+            let fmt_ref = fmt_opt.as_ref();
 
             match &cv.value {
                 CellData::String(s) => {
-                    if has_format {
+                    if let Some(fmt) = fmt_ref {
                         worksheet
-                            .write_string_with_format(row, col, s, &fmt)
+                            .write_string_with_format(row, col, s, fmt)
                             .map_err(xlsx_err)?;
                     } else {
                         worksheet.write_string(row, col, s).map_err(xlsx_err)?;
                     }
                 }
                 CellData::Number(n) => {
-                    if has_format {
+                    if let Some(fmt) = fmt_ref {
                         worksheet
-                            .write_number_with_format(row, col, *n, &fmt)
+                            .write_number_with_format(row, col, *n, fmt)
                             .map_err(xlsx_err)?;
                     } else {
                         worksheet.write_number(row, col, *n).map_err(xlsx_err)?;
                     }
                 }
                 CellData::Boolean(b) => {
-                    if has_format {
+                    if let Some(fmt) = fmt_ref {
                         worksheet
-                            .write_boolean_with_format(row, col, *b, &fmt)
+                            .write_boolean_with_format(row, col, *b, fmt)
                             .map_err(xlsx_err)?;
                     } else {
                         worksheet.write_boolean(row, col, *b).map_err(xlsx_err)?;
@@ -53,9 +89,9 @@ pub(crate) fn save_workbook(
                 }
                 CellData::Formula(f) => {
                     let formula = Formula::new(f);
-                    if has_format {
+                    if let Some(fmt) = fmt_ref {
                         worksheet
-                            .write_formula_with_format(row, col, formula, &fmt)
+                            .write_formula_with_format(row, col, formula, fmt)
                             .map_err(xlsx_err)?;
                     } else {
                         worksheet
@@ -64,9 +100,9 @@ pub(crate) fn save_workbook(
                     }
                 }
                 CellData::DateTime(serial, _kind) => {
-                    if has_format {
+                    if let Some(fmt) = fmt_ref {
                         worksheet
-                            .write_number_with_format(row, col, *serial, &fmt)
+                            .write_number_with_format(row, col, *serial, fmt)
                             .map_err(xlsx_err)?;
                     } else {
                         worksheet
@@ -74,9 +110,69 @@ pub(crate) fn save_workbook(
                             .map_err(xlsx_err)?;
                     }
                 }
+                CellData::RichText(ref json) => {
+                    let segments: Vec<serde_json::Value> =
+                        serde_json::from_str(json).map_err(|e| {
+                            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                "RichText JSON error: {}",
+                                e
+                            ))
+                        })?;
+
+                    // Build rich string segments
+                    let mut rich_parts: Vec<(Format, String)> = Vec::new();
+                    for seg in &segments {
+                        let text = seg.get("text").and_then(|v| v.as_str()).unwrap_or("");
+                        let mut seg_fmt = Format::new();
+                        if let Some(true) = seg.get("bold").and_then(|v| v.as_bool()) {
+                            seg_fmt = seg_fmt.set_bold();
+                        }
+                        if let Some(true) = seg.get("italic").and_then(|v| v.as_bool()) {
+                            seg_fmt = seg_fmt.set_italic();
+                        }
+                        if let Some(name) = seg.get("name").and_then(|v| v.as_str()) {
+                            seg_fmt = seg_fmt.set_font_name(name);
+                        }
+                        if let Some(size) = seg.get("size").and_then(|v| v.as_f64()) {
+                            seg_fmt = seg_fmt.set_font_size(size);
+                        }
+                        if let Some(color) = seg.get("color").and_then(|v| v.as_str()) {
+                            if let Some(clr) = crate::format::parse_color_str(color) {
+                                seg_fmt = seg_fmt.set_font_color(clr);
+                            }
+                        }
+                        if let Some(true) = seg.get("strikethrough").and_then(|v| v.as_bool()) {
+                            seg_fmt = seg_fmt.set_font_strikethrough();
+                        }
+                        if let Some(ul) = seg.get("underline").and_then(|v| v.as_str()) {
+                            if ul == "single" {
+                                seg_fmt =
+                                    seg_fmt.set_underline(rust_xlsxwriter::FormatUnderline::Single);
+                            } else if ul == "double" {
+                                seg_fmt =
+                                    seg_fmt.set_underline(rust_xlsxwriter::FormatUnderline::Double);
+                            }
+                        }
+                        rich_parts.push((seg_fmt, text.to_string()));
+                    }
+
+                    // Build the segments array for write_rich_string
+                    let segments_ref: Vec<(&Format, &str)> =
+                        rich_parts.iter().map(|(f, t)| (f, t.as_str())).collect();
+
+                    if let Some(fmt) = fmt_ref {
+                        worksheet
+                            .write_rich_string_with_format(row, col, &segments_ref, fmt)
+                            .map_err(xlsx_err)?;
+                    } else {
+                        worksheet
+                            .write_rich_string(row, col, &segments_ref)
+                            .map_err(xlsx_err)?;
+                    }
+                }
                 CellData::Empty => {
-                    if has_format {
-                        worksheet.write_blank(row, col, &fmt).map_err(xlsx_err)?;
+                    if let Some(fmt) = fmt_ref {
+                        worksheet.write_blank(row, col, fmt).map_err(xlsx_err)?;
                     }
                 }
             }
@@ -92,16 +188,134 @@ pub(crate) fn save_workbook(
             worksheet.set_row_height(row, height).map_err(xlsx_err)?;
         }
 
+        // Hidden rows
+        for &row in &sd.hidden_rows {
+            if !sd.row_heights.contains_key(&row) {
+                worksheet.set_row_height(row, 15.0).map_err(xlsx_err)?;
+            }
+            worksheet.set_row_hidden(row).map_err(xlsx_err)?;
+        }
+
+        // Hidden columns
+        for &col in &sd.hidden_cols {
+            if !sd.column_widths.contains_key(&col) {
+                worksheet.set_column_width(col, 8.43).map_err(xlsx_err)?;
+            }
+            worksheet.set_column_hidden(col).map_err(xlsx_err)?;
+        }
+
+        // Page breaks
+        if !sd.row_breaks.is_empty() {
+            worksheet
+                .set_page_breaks(&sd.row_breaks)
+                .map_err(xlsx_err)?;
+        }
+        if !sd.col_breaks.is_empty() {
+            let cols_u32: Vec<u32> = sd.col_breaks.iter().map(|&c| c as u32).collect();
+            worksheet
+                .set_vertical_page_breaks(&cols_u32)
+                .map_err(xlsx_err)?;
+        }
+
+        // Row outline levels (grouping)
+        // Convert per-row outline levels to group_rows calls
+        if !sd.row_outline_levels.is_empty() {
+            let max_level = sd
+                .row_outline_levels
+                .iter()
+                .map(|&(_, l)| l)
+                .max()
+                .unwrap_or(0);
+            for level in 1..=max_level {
+                // Find all rows with outline_level >= this level
+                let mut rows_at_level: Vec<u32> = sd
+                    .row_outline_levels
+                    .iter()
+                    .filter(|&&(_, l)| l >= level)
+                    .map(|&(r, _)| r)
+                    .collect();
+                rows_at_level.sort();
+                rows_at_level.dedup();
+                // Group contiguous ranges
+                let mut i = 0;
+                while i < rows_at_level.len() {
+                    let start = rows_at_level[i];
+                    let mut end = start;
+                    while i + 1 < rows_at_level.len() && rows_at_level[i + 1] == end + 1 {
+                        i += 1;
+                        end = rows_at_level[i];
+                    }
+                    worksheet.group_rows(start, end).map_err(xlsx_err)?;
+                    i += 1;
+                }
+            }
+        }
+
+        // Column outline levels (grouping)
+        // Set individual column widths first to prevent rust_xlsxwriter from
+        // merging columns into a single <col> range (openpyxl needs separate entries)
+        if !sd.col_outline_levels.is_empty() {
+            for &(col, _) in &sd.col_outline_levels {
+                if !sd.column_widths.contains_key(&col) {
+                    worksheet.set_column_width(col, 8.43).map_err(xlsx_err)?;
+                }
+            }
+            let max_level = sd
+                .col_outline_levels
+                .iter()
+                .map(|&(_, l)| l)
+                .max()
+                .unwrap_or(0);
+            for level in 1..=max_level {
+                let mut cols_at_level: Vec<u16> = sd
+                    .col_outline_levels
+                    .iter()
+                    .filter(|&&(_, l)| l >= level)
+                    .map(|&(c, _)| c)
+                    .collect();
+                cols_at_level.sort();
+                cols_at_level.dedup();
+                // Group each column individually to ensure separate <col> entries
+                for &col in &cols_at_level {
+                    worksheet.group_columns(col, col).map_err(xlsx_err)?;
+                }
+            }
+        }
+
         // Freeze panes
         if let Some((row, col)) = sd.freeze_panes {
             worksheet.set_freeze_panes(row, col).map_err(xlsx_err)?;
         }
 
+        // Sheet visibility
+        match sd.visibility {
+            1 => {
+                worksheet.set_hidden(true);
+            }
+            2 => {
+                worksheet.set_very_hidden(true);
+            }
+            _ => {}
+        }
+
+        // Zoom
+        if let Some(zoom) = sd.zoom {
+            worksheet.set_zoom(zoom);
+        }
+
+        // Gridlines
+        if let Some(show) = sd.show_gridlines {
+            worksheet.set_screen_gridlines(show);
+        }
+
         // Merged cells
-        for &(r1, c1, r2, c2) in &sd.merged_ranges {
-            worksheet
-                .merge_range(r1, c1, r2, c2, "", &Format::new())
-                .map_err(xlsx_err)?;
+        if !sd.merged_ranges.is_empty() {
+            let blank_fmt = Format::new();
+            for &(r1, c1, r2, c2) in &sd.merged_ranges {
+                worksheet
+                    .merge_range(r1, c1, r2, c2, "", &blank_fmt)
+                    .map_err(xlsx_err)?;
+            }
         }
 
         // Hyperlinks
@@ -130,12 +344,41 @@ pub(crate) fn save_workbook(
             worksheet.autofilter(r1, c1, r2, c2).map_err(xlsx_err)?;
         }
 
+        // Autofilter column filters
+        for json_str in &sd.autofilter_columns {
+            let val: serde_json::Value = serde_json::from_str(json_str).map_err(|e| {
+                pyo3::exceptions::PyRuntimeError::new_err(format!(
+                    "AutoFilter column JSON error: {}",
+                    e
+                ))
+            })?;
+            let obj = val.as_object().ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err(
+                    "AutoFilter column JSON must be an object",
+                )
+            })?;
+
+            let col = obj.get("col").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
+
+            if let Some(values) = obj.get("values").and_then(|v| v.as_array()) {
+                let mut condition = rust_xlsxwriter::FilterCondition::new();
+                for v in values {
+                    if let Some(s) = v.as_str() {
+                        condition = condition.add_list_filter(s);
+                    }
+                }
+                worksheet.filter_column(col, &condition).map_err(xlsx_err)?;
+            }
+        }
+
         // Protection
         if let Some(ref json_str) = sd.protection_json {
             let prot: serde_json::Value = serde_json::from_str(json_str).map_err(|e| {
                 pyo3::exceptions::PyRuntimeError::new_err(format!("Protection JSON error: {}", e))
             })?;
-            let obj = prot.as_object().unwrap();
+            let obj = prot.as_object().ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err("Protection JSON must be an object")
+            })?;
 
             let password = obj.get("password").and_then(|v| v.as_str());
 
@@ -199,7 +442,9 @@ pub(crate) fn save_workbook(
             let page: serde_json::Value = serde_json::from_str(json_str).map_err(|e| {
                 pyo3::exceptions::PyRuntimeError::new_err(format!("Page setup JSON error: {}", e))
             })?;
-            let obj = page.as_object().unwrap();
+            let obj = page.as_object().ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err("Page setup JSON must be an object")
+            })?;
 
             // Orientation
             if let Some(orient) = obj.get("orientation").and_then(|v| v.as_str()) {
@@ -261,10 +506,10 @@ pub(crate) fn save_workbook(
             }
 
             // Header/Footer
-            if let Some(header_str) = obj.get("header").and_then(|v| v.as_str()) {
+            if let Some(header_str) = obj.get("header_text").and_then(|v| v.as_str()) {
                 worksheet.set_header(header_str);
             }
-            if let Some(footer_str) = obj.get("footer").and_then(|v| v.as_str()) {
+            if let Some(footer_str) = obj.get("footer_text").and_then(|v| v.as_str()) {
                 worksheet.set_footer(footer_str);
             }
 
@@ -860,6 +1105,111 @@ pub(crate) fn save_workbook(
                         .add_conditional_format(r1, c1, r2, c2, &cf)
                         .map_err(xlsx_err)?;
                 }
+                "top10" => {
+                    let rank = cf_obj.get("rank").and_then(|v| v.as_u64()).unwrap_or(10) as u16;
+                    let percent = cf_obj
+                        .get("percent")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let bottom = cf_obj
+                        .get("bottom")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+
+                    let rule = match (bottom, percent) {
+                        (false, false) => rust_xlsxwriter::ConditionalFormatTopRule::Top(rank),
+                        (true, false) => rust_xlsxwriter::ConditionalFormatTopRule::Bottom(rank),
+                        (false, true) => {
+                            rust_xlsxwriter::ConditionalFormatTopRule::TopPercent(rank)
+                        }
+                        (true, true) => {
+                            rust_xlsxwriter::ConditionalFormatTopRule::BottomPercent(rank)
+                        }
+                    };
+
+                    let mut cf = rust_xlsxwriter::ConditionalFormatTop::new().set_rule(rule);
+
+                    if let Some(format_obj) = cf_obj.get("format") {
+                        let format_str = serde_json::to_string(format_obj).map_err(|e| {
+                            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                "Format serialize error: {}",
+                                e
+                            ))
+                        })?;
+                        let fmt = build_format_from_json(&format_str)
+                            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+                        cf = cf.set_format(fmt);
+                    }
+
+                    worksheet
+                        .add_conditional_format(r1, c1, r2, c2, &cf)
+                        .map_err(xlsx_err)?;
+                }
+                "duplicate" => {
+                    let mut cf = rust_xlsxwriter::ConditionalFormatDuplicate::new();
+
+                    if let Some(format_obj) = cf_obj.get("format") {
+                        let format_str = serde_json::to_string(format_obj).map_err(|e| {
+                            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                "Format serialize error: {}",
+                                e
+                            ))
+                        })?;
+                        let fmt = build_format_from_json(&format_str)
+                            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+                        cf = cf.set_format(fmt);
+                    }
+
+                    worksheet
+                        .add_conditional_format(r1, c1, r2, c2, &cf)
+                        .map_err(xlsx_err)?;
+                }
+                "text" => {
+                    let mut cf = rust_xlsxwriter::ConditionalFormatText::new();
+
+                    if let Some(text) = cf_obj.get("text").and_then(|v| v.as_str()) {
+                        let op = cf_obj
+                            .get("operator")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("containsText");
+                        let rule = match op {
+                            "containsText" => rust_xlsxwriter::ConditionalFormatTextRule::Contains(
+                                text.to_string(),
+                            ),
+                            "notContains" => {
+                                rust_xlsxwriter::ConditionalFormatTextRule::DoesNotContain(
+                                    text.to_string(),
+                                )
+                            }
+                            "beginsWith" => rust_xlsxwriter::ConditionalFormatTextRule::BeginsWith(
+                                text.to_string(),
+                            ),
+                            "endsWith" => rust_xlsxwriter::ConditionalFormatTextRule::EndsWith(
+                                text.to_string(),
+                            ),
+                            _ => rust_xlsxwriter::ConditionalFormatTextRule::Contains(
+                                text.to_string(),
+                            ),
+                        };
+                        cf = cf.set_rule(rule);
+                    }
+
+                    if let Some(format_obj) = cf_obj.get("format") {
+                        let format_str = serde_json::to_string(format_obj).map_err(|e| {
+                            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                "Format serialize error: {}",
+                                e
+                            ))
+                        })?;
+                        let fmt = build_format_from_json(&format_str)
+                            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+                        cf = cf.set_format(fmt);
+                    }
+
+                    worksheet
+                        .add_conditional_format(r1, c1, r2, c2, &cf)
+                        .map_err(xlsx_err)?;
+                }
                 _ => {} // Unknown rule type, skip
             }
         }
@@ -989,6 +1339,11 @@ pub(crate) fn save_workbook(
                 .map_err(xlsx_err)?;
         }
 
+        // Auto-fit columns
+        if sd.autofit {
+            worksheet.autofit();
+        }
+
         // Charts
         for chart_json_str in &sd.charts {
             let cv: serde_json::Value = serde_json::from_str(chart_json_str).map_err(|e| {
@@ -1050,6 +1405,17 @@ pub(crate) fn save_workbook(
             if let Some(false) = cobj.get("legend").and_then(|v| v.as_bool()) {
                 chart.legend().set_hidden();
             }
+            if let Some(pos) = cobj.get("legend_position").and_then(|v| v.as_str()) {
+                let position = match pos {
+                    "b" => rust_xlsxwriter::ChartLegendPosition::Bottom,
+                    "t" => rust_xlsxwriter::ChartLegendPosition::Top,
+                    "l" => rust_xlsxwriter::ChartLegendPosition::Left,
+                    "r" => rust_xlsxwriter::ChartLegendPosition::Right,
+                    "tr" => rust_xlsxwriter::ChartLegendPosition::TopRight,
+                    _ => rust_xlsxwriter::ChartLegendPosition::Right,
+                };
+                chart.legend().set_position(position);
+            }
 
             // Series
             if let Some(series_arr) = cobj.get("series").and_then(|v| v.as_array()) {
@@ -1082,6 +1448,52 @@ pub(crate) fn save_workbook(
 
                     if let Some(title) = s_val.get("title").and_then(|v| v.as_str()) {
                         series.set_name(title);
+                    }
+
+                    // Trendline
+                    if let Some(tl) = s_val.get("trendline").and_then(|v| v.as_object()) {
+                        let tl_type = tl.get("type").and_then(|v| v.as_str()).unwrap_or("linear");
+                        let trendline_type = match tl_type {
+                            "linear" => rust_xlsxwriter::ChartTrendlineType::Linear,
+                            "exponential" | "exp" => {
+                                rust_xlsxwriter::ChartTrendlineType::Exponential
+                            }
+                            "polynomial" | "poly" => {
+                                rust_xlsxwriter::ChartTrendlineType::Polynomial(2)
+                            }
+                            "power" => rust_xlsxwriter::ChartTrendlineType::Power,
+                            "log" | "logarithmic" => {
+                                rust_xlsxwriter::ChartTrendlineType::Logarithmic
+                            }
+                            "movingAvg" | "moving_average" => {
+                                rust_xlsxwriter::ChartTrendlineType::MovingAverage(2)
+                            }
+                            _ => rust_xlsxwriter::ChartTrendlineType::Linear,
+                        };
+                        let mut trendline = rust_xlsxwriter::ChartTrendline::new();
+                        trendline.set_type(trendline_type);
+                        if let Some(true) = tl.get("display_equation").and_then(|v| v.as_bool()) {
+                            trendline.display_equation(true);
+                        }
+                        if let Some(true) = tl.get("display_r_squared").and_then(|v| v.as_bool()) {
+                            trendline.display_r_squared(true);
+                        }
+                        series.set_trendline(&trendline);
+                    }
+
+                    // Data labels
+                    if let Some(dl) = s_val.get("data_labels").and_then(|v| v.as_object()) {
+                        let mut data_label = rust_xlsxwriter::ChartDataLabel::new();
+                        if let Some(true) = dl.get("show_value").and_then(|v| v.as_bool()) {
+                            data_label.show_value();
+                        }
+                        if let Some(true) = dl.get("show_category").and_then(|v| v.as_bool()) {
+                            data_label.show_category_name();
+                        }
+                        if let Some(true) = dl.get("show_series").and_then(|v| v.as_bool()) {
+                            data_label.show_series_name();
+                        }
+                        series.set_data_label(&data_label);
                     }
                 }
             }

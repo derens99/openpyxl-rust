@@ -21,3 +21,10 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
+
+      - id: cargo-deny
+        name: cargo deny
+        entry: cargo deny check
+        language: system
+        pass_filenames: false
+        files: "(Cargo\\.toml|Cargo\\.lock|deny\\.toml)$"

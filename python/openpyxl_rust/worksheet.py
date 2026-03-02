@@ -13,8 +13,19 @@ from openpyxl_rust.cell import (
     _underline_to_u8,
     _vert_align_to_u8,
 )
-from openpyxl_rust.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule, FormulaRule, IconSetRule
+from openpyxl_rust.formatting.rule import (
+    CellIsRule,
+    ColorScaleRule,
+    DataBarRule,
+    DuplicateRule,
+    FormulaRule,
+    IconSetRule,
+    TextRule,
+    Top10Rule,
+)
+from openpyxl_rust.header_footer import HeaderFooter
 from openpyxl_rust.page import PageMargins, PrintOptions, PrintPageSetup
+from openpyxl_rust.page_break import BreakList
 from openpyxl_rust.protection import SheetProtection
 
 
@@ -33,11 +44,16 @@ def _parse_cell_ref(ref_str):
 class ColumnDimension:
     def __init__(self):
         self.width = None
+        self.hidden = False
+        self.outline_level = 0
+        self.bestFit = False
 
 
 class RowDimension:
     def __init__(self):
         self.height = None
+        self.hidden = False
+        self.outline_level = 0
 
 
 class _ColumnDimensionsDict:
@@ -69,6 +85,7 @@ class _RowDimensionsDict:
 class _AutoFilter:
     def __init__(self):
         self._ref = None
+        self._filter_columns = []
 
     @property
     def ref(self):
@@ -77,6 +94,10 @@ class _AutoFilter:
     @ref.setter
     def ref(self, value):
         self._ref = value
+
+    def add_filter_column(self, col_id, vals, blank=False):
+        """Add a filter for a column. col_id is 0-based column index."""
+        self._filter_columns.append({"col": col_id, "values": list(vals)})
 
 
 class _ConditionalFormattingList:
@@ -117,6 +138,14 @@ class Worksheet:
         self.conditional_formatting = _ConditionalFormattingList()
         self._tables = []
         self._charts = []
+        self._sheet_state = "visible"
+        self._zoom_scale = None
+        self._show_gridlines = True
+        self._autofit = False
+        self.row_breaks = BreakList()
+        self.col_breaks = BreakList()
+        self.oddHeader = HeaderFooter()
+        self.oddFooter = HeaderFooter()
 
         if workbook is not None and sheet_idx is not None:
             workbook._rust_wb.set_sheet_title(sheet_idx, title)
@@ -134,6 +163,28 @@ class Worksheet:
         self._title = value
         if self._workbook is not None and self._sheet_idx is not None:
             self._workbook._rust_wb.set_sheet_title(self._sheet_idx, value)
+
+    @property
+    def sheet_state(self):
+        return self._sheet_state
+
+    @sheet_state.setter
+    def sheet_state(self, value):
+        if value not in ("visible", "hidden", "veryHidden"):
+            raise ValueError(f"Invalid sheet state: {value}")
+        self._sheet_state = value
+
+    @property
+    def zoom(self):
+        return self._zoom_scale
+
+    @zoom.setter
+    def zoom(self, value):
+        self._zoom_scale = value
+
+    def auto_fit_columns(self):
+        """Auto-size all columns to fit their content."""
+        self._autofit = True
 
     # ---- Dimensions (from Rust, O(1)) ----
 
@@ -211,10 +262,18 @@ class Worksheet:
         elif value is None:
             wb.set_cell_empty(idx, r0, c0)
         else:
-            raise TypeError(
-                f"Unsupported cell value type: {type(value).__name__}. "
-                f"Supported types: str, int, float, bool, datetime, date, time, None"
-            )
+            # Check for CellRichText (lazy import to avoid circular deps)
+            from openpyxl_rust.rich_text import CellRichText
+
+            if isinstance(value, CellRichText):
+                import json as _json
+
+                wb.set_cell_rich_text(idx, r0, c0, _json.dumps(value._to_json_segments()))
+            else:
+                raise TypeError(
+                    f"Unsupported cell value type: {type(value).__name__}. "
+                    f"Supported types: str, int, float, bool, datetime, date, time, None, CellRichText"
+                )
 
     # ---- Core cell() method ----
 
@@ -295,8 +354,10 @@ class Worksheet:
 
     def __getitem__(self, key):
         if isinstance(key, int):
-            min_col = self.min_column or 1
-            max_col = self.max_column or 1
+            # Single FFI call for both dimensions instead of two property accesses
+            _, mn_c, _, mx_c = self._get_dims()
+            min_col = mn_c or 1
+            max_col = mx_c or 1
             return tuple(self.cell(row=key, column=col) for col in range(min_col, max_col + 1))
         if ":" in key:
             start_ref, end_ref = key.split(":")
@@ -636,6 +697,15 @@ class Worksheet:
                     bool(b.diagonalDown),
                 )
 
+            if cell.protection is not None:
+                wb.set_cell_protection(
+                    idx,
+                    r0,
+                    c0,
+                    cell.protection.locked if cell.protection.locked is not None else None,
+                    cell.protection.hidden if cell.protection.hidden is not None else None,
+                )
+
             if cell.hyperlink is not None:
                 url = cell.hyperlink
                 text = None
@@ -658,21 +728,57 @@ class Worksheet:
         # Formats + hyperlinks + comments (only formatted cells)
         self._flush_formats_to_rust()
 
-        # Column widths
+        # Column dimensions — single pass (widths + hidden + outline levels)
         for letter, dim in self.column_dimensions.items():
-            if dim.width is not None:
+            if dim.width is not None or dim.hidden or (dim.outline_level and dim.outline_level > 0):
                 _, col_idx = _parse_cell_ref(f"{letter}1")
-                wb.set_column_width(idx, col_idx - 1, dim.width)
+                col_0 = col_idx - 1
+                if dim.width is not None:
+                    wb.set_column_width(idx, col_0, dim.width)
+                if dim.hidden:
+                    wb.set_col_hidden(idx, col_0)
+                if dim.outline_level and dim.outline_level > 0:
+                    wb.set_col_outline_level(idx, col_0, dim.outline_level)
 
-        # Row heights
+        # Row dimensions — single pass (heights + hidden + outline levels)
         for row_num, dim in self.row_dimensions.items():
+            row_0 = row_num - 1
             if dim.height is not None:
-                wb.set_row_height(idx, row_num - 1, dim.height)
+                wb.set_row_height(idx, row_0, dim.height)
+            if dim.hidden:
+                wb.set_row_hidden(idx, row_0)
+            if dim.outline_level and dim.outline_level > 0:
+                wb.set_row_outline_level(idx, row_0, dim.outline_level)
 
         # Freeze panes
         if self.freeze_panes:
             r, c = _parse_cell_ref(self.freeze_panes)
             wb.set_freeze_panes(idx, r - 1, c - 1)
+
+        # Sheet visibility
+        if self._sheet_state != "visible":
+            state_map = {"hidden": 1, "veryHidden": 2}
+            wb.set_sheet_visibility(idx, state_map[self._sheet_state])
+
+        # Zoom
+        if self._zoom_scale is not None:
+            wb.set_zoom(idx, int(self._zoom_scale))
+
+        # Gridlines
+        if not self._show_gridlines:
+            wb.set_show_gridlines(idx, self._show_gridlines)
+
+        # Auto-fit columns
+        if self._autofit:
+            wb.set_autofit(idx, True)
+
+        # Page breaks
+        if self.row_breaks:
+            breaks = [brk.id for brk in self.row_breaks]
+            wb.set_row_breaks(idx, breaks)
+        if self.col_breaks:
+            breaks = [brk.id for brk in self.col_breaks]
+            wb.set_col_breaks(idx, breaks)
 
         # Autofilter
         if self.auto_filter._ref:
@@ -680,6 +786,10 @@ class Worksheet:
             r1, c1 = _parse_cell_ref(parts[0])
             r2, c2 = _parse_cell_ref(parts[1])
             wb.set_autofilter(idx, r1 - 1, c1 - 1, r2 - 1, c2 - 1)
+
+        # Autofilter column filters
+        for fc in self.auto_filter._filter_columns:
+            wb.add_autofilter_column(idx, json.dumps(fc))
 
         # Protection
         if self.protection.sheet:
@@ -736,6 +846,13 @@ class Worksheet:
             page_data["gridlines"] = True
         if self.print_options.headings:
             page_data["headings"] = True
+        # Headers and footers
+        header_str = self.oddHeader._build_format_string()
+        if header_str:
+            page_data["header_text"] = header_str
+        footer_str = self.oddFooter._build_format_string()
+        if footer_str:
+            page_data["footer_text"] = footer_str
         if page_data:
             wb.set_page_setup(idx, json.dumps(page_data))
 
@@ -870,7 +987,34 @@ class Worksheet:
                     s_data["title"] = s.title.resolve()
                 else:
                     s_data["title"] = str(s.title)
+
+            # Trendline
+            if s.trendline is not None:
+                tl = s.trendline
+                s_data["trendline"] = {
+                    "type": tl.trendlineType,
+                    "display_equation": getattr(tl, "displayEquation", False),
+                    "display_r_squared": getattr(tl, "displayRSqr", False),
+                }
+
+            # Data labels
+            if s.dLbls is not None:
+                dl = s.dLbls
+                s_data["data_labels"] = {
+                    "show_value": getattr(dl, "showVal", False),
+                    "show_category": getattr(dl, "showCatName", False),
+                    "show_series": getattr(dl, "showSerName", False),
+                }
+
             series_list.append(s_data)
+
+        # Legend handling: support both bool and ChartLegend object
+        if isinstance(chart.legend, bool):
+            legend_val = chart.legend
+        elif chart.legend._hidden:
+            legend_val = False
+        else:
+            legend_val = True
 
         data = {
             "type": chart_type,
@@ -878,9 +1022,13 @@ class Worksheet:
             "anchor_col": c - 1,
             "width": width_px,
             "height": height_px,
-            "legend": chart.legend,
+            "legend": legend_val,
             "series": series_list,
         }
+
+        # Legend position
+        if not isinstance(chart.legend, bool) and chart.legend.position:
+            data["legend_position"] = chart.legend.position
         if chart.title is not None:
             data["title"] = str(chart.title)
         if chart.x_axis_title is not None:
@@ -999,6 +1147,41 @@ class Worksheet:
                 "range": range_string,
                 "formula": formula_list[0] if formula_list else "",
                 "stop_if_true": bool(rule.stopIfTrue),
+            }
+            fmt = self._serialize_rule_format(rule)
+            if fmt:
+                data["format"] = fmt
+            return json.dumps(data)
+
+        elif isinstance(rule, Top10Rule):
+            data = {
+                "rule_type": "top10",
+                "range": range_string,
+                "rank": rule.rank,
+                "percent": rule.percent,
+                "bottom": rule.bottom,
+            }
+            fmt = self._serialize_rule_format(rule)
+            if fmt:
+                data["format"] = fmt
+            return json.dumps(data)
+
+        elif isinstance(rule, DuplicateRule):
+            data = {
+                "rule_type": "duplicate",
+                "range": range_string,
+            }
+            fmt = self._serialize_rule_format(rule)
+            if fmt:
+                data["format"] = fmt
+            return json.dumps(data)
+
+        elif isinstance(rule, TextRule):
+            data = {
+                "rule_type": "text",
+                "range": range_string,
+                "operator": rule.operator,
+                "text": rule.text,
             }
             fmt = self._serialize_rule_format(rule)
             if fmt:

@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **save.rs crash on malformed protection JSON** — two `.unwrap()` calls on `as_object()` replaced with proper `PyRuntimeError` propagation (would panic/crash Python on malformed sheet-protection or conditional-format JSON)
+- **set_rows_batch inserting Empty entries for None cells** — `CellData::Empty` was stored for every `None` in batch writes, bloating the HashMap; now skips `None` values entirely
+- **worksheet `__getitem__` double FFI call** — single-row indexing (`ws[5]`) made two separate `get_dimensions()` calls; merged into one
+
+### Changed
+- **`has_format` dirty-bit on CellFormat** — skips expensive `Format::new()` + field conversion for the ~99% of cells with no formatting
+- **Hoisted `Format::new()` out of merged-cells loop** — single allocation reused across all merge ranges instead of one per range
+- **`std::mem::take` for row/column shift operations** — insert/delete rows/cols now do a single ownership transfer instead of `keys().collect()` + individual `.remove()` calls
+- **O(1) dimension update on insert** — insert_rows/insert_cols update cached min/max directly instead of full `recompute_dimensions()` scan
+- **`parse_cell_ref` zero-allocation rewrite** — byte-level split without heap `String` allocations
+- **`_flush_metadata` single-pass iteration** — merged 3×column + 3×row loops into 1×column + 1×row (widths, hidden, outline levels in one pass)
+- **`load_workbook` datetime pre-screening** — fast character check (`value[4]=='-'`) before attempting `strptime` on every string cell
+
 ## [0.5.0] - 2025-02-26
 
 ### Added
@@ -57,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Worksheet class with cell access, dimensions, freeze panes, merged cells
 - Workbook class with active sheet, create_sheet, getitem
 
+[Unreleased]: https://github.com/derens99/openpyxl-rust/compare/v0.5.0...HEAD
 [0.5.0]: https://github.com/derens99/openpyxl-rust/releases/tag/v0.5.0
 [0.3.0]: https://github.com/derens99/openpyxl-rust/releases/tag/v0.3.0
 [0.2.0]: https://github.com/derens99/openpyxl-rust/releases/tag/v0.2.0

@@ -3,6 +3,24 @@
 from openpyxl_rust.chart.series import Series
 
 
+class ChartLegend:
+    """Chart legend with position support.
+
+    Supports being used as a bool for backward compatibility:
+        if chart.legend:  # True when not hidden
+    """
+
+    def __init__(self):
+        self.position = None  # "b" (bottom), "t" (top), "l" (left), "r" (right), "tr" (top-right)
+        self._hidden = False
+
+    def set_hidden(self):
+        self._hidden = True
+
+    def __bool__(self):
+        return not self._hidden
+
+
 class _ChartBase:
     """Base class for all chart types."""
 
@@ -16,7 +34,7 @@ class _ChartBase:
         self.y_axis_title = None
         self.width = 15  # cm (openpyxl default)
         self.height = 7.5  # cm (openpyxl default)
-        self.legend = True
+        self.legend = ChartLegend()
         self._anchor = None  # set by ws.add_chart(chart, "E5")
 
     def add_data(self, ref, titles_from_data=False, from_rows=False):

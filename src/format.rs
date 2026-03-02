@@ -460,5 +460,21 @@ pub(crate) fn cell_format_to_xlsx_format(cf: &CellFormat) -> (Format, bool) {
         has_format = true;
     }
 
+    // Protection
+    if let Some(locked) = cf.protection_locked {
+        if locked {
+            fmt = fmt.set_locked();
+        } else {
+            fmt = fmt.set_unlocked();
+        }
+        has_format = true;
+    }
+    if let Some(hidden) = cf.protection_hidden {
+        if hidden {
+            fmt = fmt.set_hidden();
+        }
+        has_format = true;
+    }
+
     (fmt, has_format)
 }

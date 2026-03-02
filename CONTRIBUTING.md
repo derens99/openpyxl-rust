@@ -5,9 +5,10 @@ Thanks for your interest in contributing!
 ## Development Setup
 
 ### Prerequisites
-- Python 3.9+
+- Python 3.10+
 - Rust toolchain (install via [rustup](https://rustup.rs/))
-- [maturin](https://github.com/PyO3/maturin) (`pip install maturin`)
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- [just](https://github.com/casey/just) (optional, for dev commands)
 
 ### Getting Started
 
@@ -16,18 +17,16 @@ Thanks for your interest in contributing!
 git clone https://github.com/derens99/openpyxl-rust.git
 cd openpyxl-rust
 
-# Create a virtual environment
-python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+# Install dev dependencies and build (using just)
+just setup
 
-# Install dev dependencies
-pip install maturin pytest openpyxl ruff pre-commit
-
-# Build the Rust extension
-maturin develop --release
+# Or manually:
+uv sync --group dev
+uv run maturin develop --release
 
 # Run tests
-pytest tests/ -q
+just test
+# or: uv run pytest tests/ -q
 
 # Set up pre-commit hooks
 pre-commit install
@@ -45,23 +44,43 @@ benchmarks/       # Performance benchmarks
 ### Running Checks
 
 ```bash
-# Python linting + formatting
-ruff check python/ tests/ benchmarks/
-ruff format python/ tests/ benchmarks/
+# All lints (Python + Rust)
+just lint
 
-# Rust linting + formatting
-cargo clippy
-cargo fmt
+# Auto-fix Python lint issues
+just fix
+
+# License + vulnerability audit
+just deny
 
 # Tests
-pytest tests/ -q
+just test
+
+# Benchmarks
+just bench
+```
+
+Or without just:
+
+```bash
+# Python
+uvx ruff check python/ tests/
+uvx ruff format --check python/ tests/
+
+# Rust
+cargo fmt --check
+cargo clippy -- -D warnings
+cargo deny check
+
+# Tests
+uv run pytest tests/ -q
 ```
 
 ## Submitting Changes
 
-1. Fork the repo and create a branch from `main`
+1. Fork the repo and create a branch from `dev`
 2. Make your changes
-3. Ensure `ruff check`, `ruff format --check`, `cargo clippy`, `cargo fmt --check`, and `pytest` all pass
+3. Run `just lint` and `just test` to verify
 4. Submit a pull request
 
 ## Reporting Bugs
@@ -70,5 +89,5 @@ Use the [bug report template](https://github.com/derens99/openpyxl-rust/issues/n
 
 ## Code Style
 
-- **Python**: Formatted with ruff (config in `pyproject.toml`)
-- **Rust**: Formatted with rustfmt, linted with clippy
+- **Python**: Formatted and linted with [ruff](https://docs.astral.sh/ruff/) (config in `pyproject.toml`)
+- **Rust**: Formatted with rustfmt, linted with clippy (config in `Cargo.toml` `[lints]`)

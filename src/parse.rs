@@ -34,24 +34,23 @@ pub(crate) fn col_letters_to_index(letters: &str) -> Option<u16> {
 }
 
 /// Parse a cell reference like "A1" to (row_0based, col_0based).
+/// Zero-allocation: splits at the letter/digit boundary without heap strings.
 pub(crate) fn parse_cell_ref(s: &str) -> Option<(u32, u16)> {
     let s = s.trim();
-    let mut letters = String::new();
-    let mut digits = String::new();
-    for ch in s.chars() {
-        if ch.is_ascii_alphabetic() {
-            if !digits.is_empty() {
-                return None;
-            }
-            letters.push(ch);
-        } else if ch.is_ascii_digit() {
-            digits.push(ch);
-        } else {
-            return None;
-        }
+    if s.is_empty() {
+        return None;
     }
-    let col = col_letters_to_index(&letters)?;
-    let row: u32 = digits.parse().ok()?;
+    // Find the split point where letters end and digits begin
+    let split = s.as_bytes().iter().position(|b| b.is_ascii_digit())?;
+    if split == 0 {
+        return None; // no letters
+    }
+    // Verify no letters after digits
+    if s.as_bytes()[split..].iter().any(|b| !b.is_ascii_digit()) {
+        return None;
+    }
+    let col = col_letters_to_index(&s[..split])?;
+    let row: u32 = s[split..].parse().ok()?;
     if row == 0 {
         return None;
     }

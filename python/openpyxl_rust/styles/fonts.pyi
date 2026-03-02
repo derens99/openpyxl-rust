@@ -1,24 +1,22 @@
-from typing import Optional, Union
-
 class Font:
     name: str
-    size: Union[int, float]
+    size: int | float
     bold: bool
     italic: bool
-    underline: Optional[str]
-    color: Optional[str]
+    underline: str | None
+    color: str | None
     strikethrough: bool
-    vertAlign: Optional[str]
+    vertAlign: str | None
     def __init__(
         self,
         name: str = "Calibri",
-        size: Union[int, float] = 11,
+        size: int | float = 11,
         bold: bool = False,
         italic: bool = False,
-        underline: Optional[str] = None,
-        color: Optional[str] = None,
+        underline: str | None = None,
+        color: str | None = None,
         strikethrough: bool = False,
-        vertAlign: Optional[str] = None,
+        vertAlign: str | None = None,
     ) -> None: ...
     def __eq__(self, other: object) -> bool: ...
     def __repr__(self) -> str: ...
