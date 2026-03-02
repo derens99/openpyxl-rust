@@ -3,12 +3,13 @@
 [![CI](https://github.com/derens99/openpyxl-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/derens99/openpyxl-rust/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Fast, Rust-backed Excel (.xlsx) writer with an openpyxl-compatible Python API. Typically **2-3x faster** than openpyxl for write operations.
+Fast, Rust-backed Excel (.xlsx) writer with an openpyxl-compatible Python API. Typically **3-4x faster** than openpyxl for write operations.
 
 ## Installation
 
+Requires Rust toolchain + [maturin](https://github.com/PyO3/maturin):
+
 ```bash
-# Development (requires Rust toolchain + maturin)
 pip install -e .
 
 # Or build a wheel
@@ -94,6 +95,10 @@ Average **3.5x speedup** over openpyxl across workloads:
 ## How It Works
 
 Python classes (`Workbook`, `Worksheet`, `Cell`) mirror openpyxl's API. Rust is the sole data store — Python `Cell` is a thin proxy that reads/writes through PyO3 FFI. At save time, the Rust engine (`rust_xlsxwriter`) writes the .xlsx file directly. Reading uses `calamine` for fast parsing.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
 ## License
 

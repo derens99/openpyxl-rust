@@ -1,12 +1,10 @@
-from typing import Optional
-
 class Side:
-    style: Optional[str]
-    color: Optional[str]
+    style: str | None
+    color: str | None
     def __init__(
         self,
-        style: Optional[str] = None,
-        color: Optional[str] = None,
+        style: str | None = None,
+        color: str | None = None,
     ) -> None: ...
     def __eq__(self, other: object) -> bool: ...
     def __repr__(self) -> str: ...
@@ -21,11 +19,11 @@ class Border:
     diagonalDown: bool
     def __init__(
         self,
-        left: Optional[Side] = None,
-        right: Optional[Side] = None,
-        top: Optional[Side] = None,
-        bottom: Optional[Side] = None,
-        diagonal: Optional[Side] = None,
+        left: Side | None = None,
+        right: Side | None = None,
+        top: Side | None = None,
+        bottom: Side | None = None,
+        diagonal: Side | None = None,
         diagonalUp: bool = False,
         diagonalDown: bool = False,
     ) -> None: ...

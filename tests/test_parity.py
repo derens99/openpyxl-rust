@@ -18,33 +18,50 @@ import zipfile
 import zlib
 from datetime import date, datetime, time
 
-import pytest
 import openpyxl as real_openpyxl
+import pytest
 
 from openpyxl_rust import (
-    Workbook as RustWorkbook,
-    load_workbook as rust_load_workbook,
     Comment,
     DataValidation,
     DefinedName,
     Image,
     PageMargins,
-    PrintOptions,
-    PrintPageSetup,
     SheetProtection,
     Table,
     TableColumn,
     TableStyleInfo,
 )
-from openpyxl_rust.styles import Font, PatternFill, Border, Side, Alignment
-from openpyxl_rust.formatting.rule import (
-    CellIsRule, FormulaRule, ColorScaleRule, DataBarRule, IconSetRule,
+from openpyxl_rust import (
+    Workbook as RustWorkbook,
+)
+from openpyxl_rust import (
+    load_workbook as rust_load_workbook,
 )
 from openpyxl_rust.chart import (
-    BarChart, BarChart3D, LineChart, LineChart3D, PieChart, PieChart3D,
-    AreaChart, AreaChart3D, ScatterChart, DoughnutChart, RadarChart,
-    StockChart, Reference, Series,
+    AreaChart,
+    AreaChart3D,
+    BarChart,
+    BarChart3D,
+    DoughnutChart,
+    LineChart,
+    LineChart3D,
+    PieChart,
+    PieChart3D,
+    RadarChart,
+    Reference,
+    ScatterChart,
+    Series,
+    StockChart,
 )
+from openpyxl_rust.formatting.rule import (
+    CellIsRule,
+    ColorScaleRule,
+    DataBarRule,
+    FormulaRule,
+    IconSetRule,
+)
+from openpyxl_rust.styles import Alignment, Border, Font, PatternFill, Side
 
 
 def _save_and_reopen(wb, tmp_path, name="test.xlsx"):
@@ -146,7 +163,7 @@ class TestSheetManagementParity:
 
     def test_create_sheet_default_title(self, tmp_path):
         wb = RustWorkbook()
-        ws = wb.create_sheet()
+        wb.create_sheet()
         rb = _save_and_reopen(wb, tmp_path)
         assert len(rb.sheetnames) == 2
 
@@ -408,13 +425,10 @@ class TestCellDataTypesParity:
     def test_rich_text(self, tmp_path):
         from openpyxl_rust.rich_text import CellRichText, TextBlock
         from openpyxl_rust.styles import Font
+
         wb = RustWorkbook()
         ws = wb.active
-        rt = CellRichText(
-            "Normal ",
-            TextBlock(Font(bold=True), "Bold"),
-            " end"
-        )
+        rt = CellRichText("Normal ", TextBlock(Font(bold=True), "Bold"), " end")
         ws["A1"].value = rt
         wb.save(str(tmp_path / "test.xlsx"))
 
@@ -719,6 +733,7 @@ class TestCellStylesParity:
 
     def test_cell_protection(self, tmp_path):
         from openpyxl_rust.styles import Protection
+
         wb = RustWorkbook()
         ws = wb.active
         ws["A1"] = "locked"
@@ -1061,8 +1076,12 @@ class TestDataValidationParity:
         wb = RustWorkbook()
         ws = wb.active
         dv = DataValidation(
-            type="whole", operator="greaterThan", formula1="0",
-            showErrorMessage=True, errorTitle="Invalid", error="Must be positive",
+            type="whole",
+            operator="greaterThan",
+            formula1="0",
+            showErrorMessage=True,
+            errorTitle="Invalid",
+            error="Must be positive",
             errorStyle="stop",
         )
         dv.add("A1")
@@ -1076,8 +1095,11 @@ class TestDataValidationParity:
         wb = RustWorkbook()
         ws = wb.active
         dv = DataValidation(
-            type="list", formula1='"A,B,C"',
-            showInputMessage=True, promptTitle="Choose", prompt="Pick a letter",
+            type="list",
+            formula1='"A,B,C"',
+            showInputMessage=True,
+            promptTitle="Choose",
+            prompt="Pick a letter",
         )
         dv.add("A1")
         ws.add_data_validation(dv)
@@ -1101,8 +1123,14 @@ class TestDataValidationParity:
     def test_all_operators(self, tmp_path):
         """Test every comparison operator works."""
         operators = [
-            "between", "notBetween", "equal", "notEqual",
-            "greaterThan", "lessThan", "greaterThanOrEqual", "lessThanOrEqual",
+            "between",
+            "notBetween",
+            "equal",
+            "notEqual",
+            "greaterThan",
+            "lessThan",
+            "greaterThanOrEqual",
+            "lessThanOrEqual",
         ]
         for op in operators:
             wb = RustWorkbook()
@@ -1134,8 +1162,10 @@ class TestConditionalFormattingParity:
         for i in range(1, 11):
             ws.cell(row=i, column=1, value=i)
         rule = ColorScaleRule(
-            start_type="min", start_color="FF0000",
-            end_type="max", end_color="00FF00",
+            start_type="min",
+            start_color="FF0000",
+            end_type="max",
+            end_color="00FF00",
         )
         ws.conditional_formatting.add("A1:A10", rule)
         rb = _save_and_reopen(wb, tmp_path)
@@ -1148,9 +1178,13 @@ class TestConditionalFormattingParity:
         for i in range(1, 11):
             ws.cell(row=i, column=1, value=i)
         rule = ColorScaleRule(
-            start_type="min", start_color="FF0000",
-            mid_type="percentile", mid_value=50, mid_color="FFFF00",
-            end_type="max", end_color="00FF00",
+            start_type="min",
+            start_color="FF0000",
+            mid_type="percentile",
+            mid_value=50,
+            mid_color="FFFF00",
+            end_type="max",
+            end_color="00FF00",
         )
         ws.conditional_formatting.add("A1:A10", rule)
         rb = _save_and_reopen(wb, tmp_path)
@@ -1163,7 +1197,9 @@ class TestConditionalFormattingParity:
         for i in range(1, 6):
             ws.cell(row=i, column=1, value=i * 10)
         rule = DataBarRule(
-            start_type="min", end_type="max", color="638EC6",
+            start_type="min",
+            end_type="max",
+            color="638EC6",
         )
         ws.conditional_formatting.add("A1:A5", rule)
         rb = _save_and_reopen(wb, tmp_path)
@@ -1185,7 +1221,8 @@ class TestConditionalFormattingParity:
         for i in range(1, 6):
             ws.cell(row=i, column=1, value=i * 10)
         rule = CellIsRule(
-            operator="lessThan", formula=["30"],
+            operator="lessThan",
+            formula=["30"],
             font=Font(color="FF0000"),
         )
         ws.conditional_formatting.add("A1:A5", rule)
@@ -1198,7 +1235,8 @@ class TestConditionalFormattingParity:
         for i in range(1, 6):
             ws.cell(row=i, column=1, value=i * 10)
         rule = CellIsRule(
-            operator="between", formula=["20", "40"],
+            operator="between",
+            formula=["20", "40"],
             fill=PatternFill(fill_type="solid", start_color="FFFF00"),
         )
         ws.conditional_formatting.add("A1:A5", rule)
@@ -1348,7 +1386,8 @@ class TestTablesParity:
         ws.append(["Bob", 87])
         tab = Table(displayName="Scores", ref="A1:B3")
         tab.tableStyleInfo = TableStyleInfo(
-            name="TableStyleMedium9", showRowStripes=True,
+            name="TableStyleMedium9",
+            showRowStripes=True,
         )
         ws.add_table(tab)
         rb = _save_and_reopen(wb, tmp_path)
@@ -1533,11 +1572,12 @@ class TestPrintSetupParity:
         header = rb.active.oddHeader
         assert header is not None
         # The header text should contain "My Header"
-        header_text = header.center.text if hasattr(header.center, 'text') else str(header)
+        header_text = header.center.text if hasattr(header.center, "text") else str(header)
         assert "My Header" in str(header_text) or "My Header" in str(header)
 
     def test_page_breaks(self, tmp_path):
         from openpyxl_rust.page_break import Break
+
         wb = RustWorkbook()
         ws = wb.active
         ws["A1"] = "page 1"
@@ -1578,7 +1618,10 @@ class TestSheetProtectionParity:
         ws = wb.active
         ws["A1"] = "options"
         ws.protection = SheetProtection(
-            sheet=True, format_cells=False, insert_rows=False, sort=False,
+            sheet=True,
+            format_cells=False,
+            insert_rows=False,
+            sort=False,
         )
         rb = _save_and_reopen(wb, tmp_path)
         assert rb.active.protection.sheet is True
@@ -1657,6 +1700,7 @@ class TestImagesParity:
 
     def _make_png_bytes(self):
         """Create a minimal valid PNG (1x1 red pixel)."""
+
         def chunk(ctype, data):
             c = ctype + data
             return struct.pack(">I", len(data)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
@@ -1875,9 +1919,7 @@ class TestChartsParity:
         else:
             # Title object -> tx -> rich -> paragraphs -> runs -> t
             paragraphs = title.tx.rich.paragraphs if title.tx and title.tx.rich else []
-            title_text = "".join(
-                run.t for p in paragraphs for run in (p.r or []) if run.t
-            )
+            title_text = "".join(run.t for p in paragraphs for run in (p.r or []) if run.t)
         assert title_text == "My Custom Title"
 
     def test_chart_axis_titles(self, tmp_path):
@@ -1943,12 +1985,14 @@ class TestChartsParity:
 
     def test_chart_trendline(self, tmp_path):
         from openpyxl_rust.chart.series import Trendline
+
         wb = RustWorkbook()
         ws = wb.active
         for i in range(1, 6):
             ws.cell(row=i, column=1, value=i)
             ws.cell(row=i, column=2, value=i * 2 + 1)
         from openpyxl_rust.chart import BarChart, Reference
+
         chart = BarChart()
         data = Reference(ws, min_col=2, min_row=1, max_row=5)
         chart.add_data(data)
@@ -1961,12 +2005,14 @@ class TestChartsParity:
 
     def test_chart_data_labels(self, tmp_path):
         from openpyxl_rust.chart.series import DataLabelList
+
         wb = RustWorkbook()
         ws = wb.active
         for i in range(1, 6):
             ws.cell(row=i, column=1, value=f"Cat{i}")
             ws.cell(row=i, column=2, value=i * 10)
         from openpyxl_rust.chart import BarChart, Reference
+
         chart = BarChart()
         data = Reference(ws, min_col=2, min_row=1, max_row=5)
         chart.add_data(data)
@@ -1983,6 +2029,7 @@ class TestChartsParity:
         for i in range(1, 6):
             ws.cell(row=i, column=1, value=i * 10)
         from openpyxl_rust.chart import BarChart, Reference
+
         chart = BarChart()
         data = Reference(ws, min_col=1, min_row=1, max_row=5)
         chart.add_data(data)
@@ -2164,7 +2211,6 @@ class TestRowColOpsParity:
 # 24. Header/Footer
 # ---------------------------------------------------------------------------
 class TestHeaderFooterParity:
-
     def test_odd_header(self, tmp_path):
         wb = RustWorkbook()
         ws = wb.active
@@ -2204,9 +2250,9 @@ class TestHeaderFooterParity:
 # 25. Page Breaks
 # ---------------------------------------------------------------------------
 class TestPageBreaksParity:
-
     def test_row_break(self, tmp_path):
         from openpyxl_rust.page_break import Break
+
         wb = RustWorkbook()
         ws = wb.active
         ws["A1"] = "above break"
@@ -2220,6 +2266,7 @@ class TestPageBreaksParity:
 
     def test_col_break(self, tmp_path):
         from openpyxl_rust.page_break import Break
+
         wb = RustWorkbook()
         ws = wb.active
         ws["A1"] = "left of break"
@@ -2236,7 +2283,6 @@ class TestPageBreaksParity:
 # 26. Workbook Protection
 # ---------------------------------------------------------------------------
 class TestWorkbookProtectionParity:
-
     @pytest.mark.skip(reason="not yet implemented: workbook lock structure")
     def test_lock_structure(self, tmp_path):
         pass
@@ -2250,7 +2296,6 @@ class TestWorkbookProtectionParity:
 # 27. Document Properties
 # ---------------------------------------------------------------------------
 class TestDocumentPropertiesParity:
-
     def test_title(self, tmp_path):
         wb = RustWorkbook()
         ws = wb.active
@@ -2286,9 +2331,9 @@ class TestDocumentPropertiesParity:
 # 28. Rich Text
 # ---------------------------------------------------------------------------
 class TestRichTextParity:
-
     def test_rich_text_basic(self, tmp_path):
         from openpyxl_rust.rich_text import CellRichText, TextBlock
+
         wb = RustWorkbook()
         ws = wb.active
         rt = CellRichText("Hello ", TextBlock(text="World"))
@@ -2306,13 +2351,10 @@ class TestRichTextParity:
     def test_mixed_formatting(self, tmp_path):
         from openpyxl_rust.rich_text import CellRichText, TextBlock
         from openpyxl_rust.styles import Font
+
         wb = RustWorkbook()
         ws = wb.active
-        rt = CellRichText(
-            "Plain ",
-            TextBlock(Font(bold=True, color="FF0000"), "Red Bold"),
-            " more plain"
-        )
+        rt = CellRichText("Plain ", TextBlock(Font(bold=True, color="FF0000"), "Red Bold"), " more plain")
         ws["A1"].value = rt
         wb.save(str(tmp_path / "test.xlsx"))
 
@@ -2326,7 +2368,6 @@ class TestRichTextParity:
 # 29. Pivot Tables
 # ---------------------------------------------------------------------------
 class TestPivotTablesParity:
-
     @pytest.mark.skip(reason="not yet implemented: pivot table creation")
     def test_basic_pivot(self, tmp_path):
         pass
@@ -2340,7 +2381,6 @@ class TestPivotTablesParity:
 # 30. Move Range
 # ---------------------------------------------------------------------------
 class TestMoveRangeParity:
-
     @pytest.mark.skip(reason="not yet implemented: move_range shift cells")
     def test_move_range_basic(self, tmp_path):
         pass
@@ -2354,7 +2394,6 @@ class TestMoveRangeParity:
 # 31. Advanced Features (unique stubs not covered by other classes)
 # ---------------------------------------------------------------------------
 class TestAdvancedFeaturesParity:
-
     @pytest.mark.skip(reason="not yet implemented: tab color")
     def test_tab_color(self, tmp_path):
         pass

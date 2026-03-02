@@ -1,5 +1,4 @@
 from openpyxl_rust.cell import Cell
-from openpyxl_rust.rich_text import CellRichText, TextBlock
 from openpyxl_rust.chart import (
     AreaChart,
     AreaChart3D,
@@ -18,12 +17,22 @@ from openpyxl_rust.chart import (
 )
 from openpyxl_rust.comments import Comment
 from openpyxl_rust.datavalidation import DataValidation
-from openpyxl_rust.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule, DuplicateRule, FormulaRule, IconSetRule, TextRule, Top10Rule
+from openpyxl_rust.formatting.rule import (
+    CellIsRule,
+    ColorScaleRule,
+    DataBarRule,
+    DuplicateRule,
+    FormulaRule,
+    IconSetRule,
+    TextRule,
+    Top10Rule,
+)
 from openpyxl_rust.image import Image
 from openpyxl_rust.page import PageMargins, PrintOptions, PrintPageSetup
 from openpyxl_rust.page_break import Break, BreakList
 from openpyxl_rust.properties import DocumentProperties
 from openpyxl_rust.protection import SheetProtection
+from openpyxl_rust.rich_text import CellRichText, TextBlock
 from openpyxl_rust.styles.protection import Protection
 from openpyxl_rust.table import Table, TableColumn, TableStyleInfo
 from openpyxl_rust.workbook import DefinedName, Workbook
@@ -88,8 +97,10 @@ def load_workbook(filename, data_only=True):
         for r_idx, row in enumerate(rows):
             for c_idx, value in enumerate(row):
                 if value is not None:
-                    # Parse datetime strings from calamine back to Python datetime
-                    if isinstance(value, str):
+                    # Parse datetime strings from calamine back to Python datetime.
+                    # Fast pre-screen: only attempt strptime on strings that look
+                    # like "YYYY-MM-..." (≥10 chars, digits at 0-3, dashes at 4,7).
+                    if isinstance(value, str) and len(value) >= 10 and value[4] == "-" and value[7] == "-":
                         for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
                             try:
                                 value = datetime.strptime(value, fmt)
@@ -109,23 +120,21 @@ __all__ = [
     "AreaChart3D",
     "BarChart",
     "BarChart3D",
+    "Break",
+    "BreakList",
     "Cell",
-    "CellRichText",
     "CellIsRule",
+    "CellRichText",
     "ColorScaleRule",
     "Comment",
     "DataBarRule",
     "DataValidation",
-    "Break",
-    "BreakList",
     "DefinedName",
     "DocumentProperties",
     "DoughnutChart",
     "DuplicateRule",
     "FormulaRule",
     "IconSetRule",
-    "TextRule",
-    "Top10Rule",
     "Image",
     "LineChart",
     "LineChart3D",
@@ -145,6 +154,8 @@ __all__ = [
     "TableColumn",
     "TableStyleInfo",
     "TextBlock",
+    "TextRule",
+    "Top10Rule",
     "Workbook",
     "Worksheet",
     "load_workbook",

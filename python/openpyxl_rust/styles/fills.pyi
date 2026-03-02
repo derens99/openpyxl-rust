@@ -1,24 +1,22 @@
-from typing import Optional
-
 class PatternFill:
-    fill_type: Optional[str]
-    start_color: Optional[str]
-    end_color: Optional[str]
+    fill_type: str | None
+    start_color: str | None
+    end_color: str | None
     def __init__(
         self,
-        fill_type: Optional[str] = None,
-        start_color: Optional[str] = None,
-        end_color: Optional[str] = None,
-        fgColor: Optional[str] = None,
-        bgColor: Optional[str] = None,
+        fill_type: str | None = None,
+        start_color: str | None = None,
+        end_color: str | None = None,
+        fgColor: str | None = None,
+        bgColor: str | None = None,
     ) -> None: ...
     @property
-    def fgColor(self) -> Optional[str]: ...
+    def fgColor(self) -> str | None: ...
     @fgColor.setter
-    def fgColor(self, value: Optional[str]) -> None: ...
+    def fgColor(self, value: str | None) -> None: ...
     @property
-    def bgColor(self) -> Optional[str]: ...
+    def bgColor(self) -> str | None: ...
     @bgColor.setter
-    def bgColor(self, value: Optional[str]) -> None: ...
+    def bgColor(self, value: str | None) -> None: ...
     def __eq__(self, other: object) -> bool: ...
     def __repr__(self) -> str: ...

@@ -13,10 +13,19 @@ from openpyxl_rust.cell import (
     _underline_to_u8,
     _vert_align_to_u8,
 )
-from openpyxl_rust.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule, DuplicateRule, FormulaRule, IconSetRule, TextRule, Top10Rule
+from openpyxl_rust.formatting.rule import (
+    CellIsRule,
+    ColorScaleRule,
+    DataBarRule,
+    DuplicateRule,
+    FormulaRule,
+    IconSetRule,
+    TextRule,
+    Top10Rule,
+)
+from openpyxl_rust.header_footer import HeaderFooter
 from openpyxl_rust.page import PageMargins, PrintOptions, PrintPageSetup
 from openpyxl_rust.page_break import BreakList
-from openpyxl_rust.header_footer import HeaderFooter
 from openpyxl_rust.protection import SheetProtection
 
 
@@ -161,7 +170,7 @@ class Worksheet:
 
     @sheet_state.setter
     def sheet_state(self, value):
-        if value not in ('visible', 'hidden', 'veryHidden'):
+        if value not in ("visible", "hidden", "veryHidden"):
             raise ValueError(f"Invalid sheet state: {value}")
         self._sheet_state = value
 
@@ -255,8 +264,10 @@ class Worksheet:
         else:
             # Check for CellRichText (lazy import to avoid circular deps)
             from openpyxl_rust.rich_text import CellRichText
+
             if isinstance(value, CellRichText):
                 import json as _json
+
                 wb.set_cell_rich_text(idx, r0, c0, _json.dumps(value._to_json_segments()))
             else:
                 raise TypeError(
@@ -343,8 +354,10 @@ class Worksheet:
 
     def __getitem__(self, key):
         if isinstance(key, int):
-            min_col = self.min_column or 1
-            max_col = self.max_column or 1
+            # Single FFI call for both dimensions instead of two property accesses
+            _, mn_c, _, mx_c = self._get_dims()
+            min_col = mn_c or 1
+            max_col = mx_c or 1
             return tuple(self.cell(row=key, column=col) for col in range(min_col, max_col + 1))
         if ":" in key:
             start_ref, end_ref = key.split(":")
@@ -686,7 +699,9 @@ class Worksheet:
 
             if cell.protection is not None:
                 wb.set_cell_protection(
-                    idx, r0, c0,
+                    idx,
+                    r0,
+                    c0,
                     cell.protection.locked if cell.protection.locked is not None else None,
                     cell.protection.hidden if cell.protection.hidden is not None else None,
                 )
@@ -713,16 +728,27 @@ class Worksheet:
         # Formats + hyperlinks + comments (only formatted cells)
         self._flush_formats_to_rust()
 
-        # Column widths
+        # Column dimensions — single pass (widths + hidden + outline levels)
         for letter, dim in self.column_dimensions.items():
-            if dim.width is not None:
+            if dim.width is not None or dim.hidden or (dim.outline_level and dim.outline_level > 0):
                 _, col_idx = _parse_cell_ref(f"{letter}1")
-                wb.set_column_width(idx, col_idx - 1, dim.width)
+                col_0 = col_idx - 1
+                if dim.width is not None:
+                    wb.set_column_width(idx, col_0, dim.width)
+                if dim.hidden:
+                    wb.set_col_hidden(idx, col_0)
+                if dim.outline_level and dim.outline_level > 0:
+                    wb.set_col_outline_level(idx, col_0, dim.outline_level)
 
-        # Row heights
+        # Row dimensions — single pass (heights + hidden + outline levels)
         for row_num, dim in self.row_dimensions.items():
+            row_0 = row_num - 1
             if dim.height is not None:
-                wb.set_row_height(idx, row_num - 1, dim.height)
+                wb.set_row_height(idx, row_0, dim.height)
+            if dim.hidden:
+                wb.set_row_hidden(idx, row_0)
+            if dim.outline_level and dim.outline_level > 0:
+                wb.set_row_outline_level(idx, row_0, dim.outline_level)
 
         # Freeze panes
         if self.freeze_panes:
@@ -733,17 +759,6 @@ class Worksheet:
         if self._sheet_state != "visible":
             state_map = {"hidden": 1, "veryHidden": 2}
             wb.set_sheet_visibility(idx, state_map[self._sheet_state])
-
-        # Hidden rows
-        for row_num, dim in self.row_dimensions.items():
-            if dim.hidden:
-                wb.set_row_hidden(idx, row_num - 1)
-
-        # Hidden columns
-        for letter, dim in self.column_dimensions.items():
-            if dim.hidden:
-                _, col_idx = _parse_cell_ref(f"{letter}1")
-                wb.set_col_hidden(idx, col_idx - 1)
 
         # Zoom
         if self._zoom_scale is not None:
@@ -764,17 +779,6 @@ class Worksheet:
         if self.col_breaks:
             breaks = [brk.id for brk in self.col_breaks]
             wb.set_col_breaks(idx, breaks)
-
-        # Row outline levels
-        for row_num, dim in self.row_dimensions.items():
-            if dim.outline_level and dim.outline_level > 0:
-                wb.set_row_outline_level(idx, row_num - 1, dim.outline_level)
-
-        # Column outline levels
-        for letter, dim in self.column_dimensions.items():
-            if dim.outline_level and dim.outline_level > 0:
-                _, col_idx = _parse_cell_ref(f"{letter}1")
-                wb.set_col_outline_level(idx, col_idx - 1, dim.outline_level)
 
         # Autofilter
         if self.auto_filter._ref:
@@ -989,17 +993,17 @@ class Worksheet:
                 tl = s.trendline
                 s_data["trendline"] = {
                     "type": tl.trendlineType,
-                    "display_equation": getattr(tl, 'displayEquation', False),
-                    "display_r_squared": getattr(tl, 'displayRSqr', False),
+                    "display_equation": getattr(tl, "displayEquation", False),
+                    "display_r_squared": getattr(tl, "displayRSqr", False),
                 }
 
             # Data labels
             if s.dLbls is not None:
                 dl = s.dLbls
                 s_data["data_labels"] = {
-                    "show_value": getattr(dl, 'showVal', False),
-                    "show_category": getattr(dl, 'showCatName', False),
-                    "show_series": getattr(dl, 'showSerName', False),
+                    "show_value": getattr(dl, "showVal", False),
+                    "show_category": getattr(dl, "showCatName", False),
+                    "show_series": getattr(dl, "showSerName", False),
                 }
 
             series_list.append(s_data)

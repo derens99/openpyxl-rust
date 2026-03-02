@@ -1,11 +1,13 @@
 class HeaderFooterItem:
     """Represents left, center, or right section of a header/footer."""
+
     def __init__(self):
         self.text = None
 
 
 class HeaderFooter:
     """openpyxl-compatible header/footer with left, center, right sections."""
+
     def __init__(self):
         self.left = HeaderFooterItem()
         self.center = HeaderFooterItem()

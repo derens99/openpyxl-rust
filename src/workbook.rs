@@ -245,7 +245,13 @@ impl RustWorkbook {
         Ok(())
     }
 
-    fn set_cell_rich_text(&mut self, sheet: usize, row: u32, col: u16, json: String) -> PyResult<()> {
+    fn set_cell_rich_text(
+        &mut self,
+        sheet: usize,
+        row: u32,
+        col: u16,
+        json: String,
+    ) -> PyResult<()> {
         let sd = self
             .sheets
             .get_mut(sheet)
@@ -512,9 +518,10 @@ impl RustWorkbook {
                 let col = col_idx as u16;
                 let key = (row, col);
 
-                let cell_data = if cell_obj.is_none() {
-                    CellData::Empty
-                } else if let Ok(b) = cell_obj.extract::<bool>() {
+                if cell_obj.is_none() {
+                    continue;
+                }
+                let cell_data = if let Ok(b) = cell_obj.extract::<bool>() {
                     CellData::Boolean(b)
                 } else if let Ok(n) = cell_obj.extract::<f64>() {
                     CellData::Number(n)
@@ -615,6 +622,7 @@ impl RustWorkbook {
         cv.format.font_underline = underline;
         cv.format.font_strikethrough = strikethrough;
         cv.format.font_vert_align = vert_align;
+        cv.format.has_format = true;
         sd.track_cell(row, col);
         Ok(())
     }
@@ -647,6 +655,7 @@ impl RustWorkbook {
         cv.format.align_shrink_to_fit = shrink_to_fit;
         cv.format.align_indent = indent;
         cv.format.align_text_rotation = text_rotation;
+        cv.format.has_format = true;
         sd.track_cell(row, col);
         Ok(())
     }
@@ -672,6 +681,7 @@ impl RustWorkbook {
         cv.format.fill_type = fill_type;
         cv.format.fill_start_color = start_color;
         cv.format.fill_end_color = end_color;
+        cv.format.has_format = true;
         sd.track_cell(row, col);
         Ok(())
     }
@@ -716,6 +726,7 @@ impl RustWorkbook {
         cv.format.border_diagonal_color = diag_color;
         cv.format.border_diagonal_up = diag_up;
         cv.format.border_diagonal_down = diag_down;
+        cv.format.has_format = true;
         sd.track_cell(row, col);
         Ok(())
     }
@@ -739,6 +750,7 @@ impl RustWorkbook {
         });
         cv.format.protection_locked = locked;
         cv.format.protection_hidden = hidden;
+        cv.format.has_format = true;
         sd.track_cell(row, col);
         Ok(())
     }
@@ -760,6 +772,7 @@ impl RustWorkbook {
             format: CellFormat::default(),
         });
         cv.format.number_format = Some(format);
+        cv.format.has_format = true;
         sd.track_cell(row, col);
         Ok(())
     }
@@ -861,11 +874,9 @@ impl RustWorkbook {
             .sheets
             .get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
-        let keys: Vec<(u32, u16)> = sd.cells.keys().cloned().collect();
-        let mut new_cells = std::collections::HashMap::new();
-        for key in keys {
-            let (r, c) = key;
-            let cv = sd.cells.remove(&key).unwrap();
+        let old_cells = std::mem::take(&mut sd.cells);
+        let mut new_cells = std::collections::HashMap::with_capacity(old_cells.len());
+        for ((r, c), cv) in old_cells {
             if r >= idx {
                 new_cells.insert((r + amount, c), cv);
             } else {
@@ -894,7 +905,12 @@ impl RustWorkbook {
         if sd.append_row >= idx {
             sd.append_row += amount;
         }
-        sd.recompute_dimensions();
+        // O(1) dimension update for inserts: min stays, max shifts
+        if let Some(mx) = sd.max_row {
+            if mx >= idx {
+                sd.max_row = Some(mx + amount);
+            }
+        }
         Ok(())
     }
 
@@ -903,11 +919,9 @@ impl RustWorkbook {
             .sheets
             .get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
-        let keys: Vec<(u32, u16)> = sd.cells.keys().cloned().collect();
-        let mut new_cells = std::collections::HashMap::new();
-        for key in keys {
-            let (r, c) = key;
-            let cv = sd.cells.remove(&key).unwrap();
+        let old_cells = std::mem::take(&mut sd.cells);
+        let mut new_cells = std::collections::HashMap::with_capacity(old_cells.len());
+        for ((r, c), cv) in old_cells {
             if r >= idx && r < idx + amount {
                 // deleted
             } else if r >= idx + amount {
@@ -954,11 +968,9 @@ impl RustWorkbook {
             .sheets
             .get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
-        let keys: Vec<(u32, u16)> = sd.cells.keys().cloned().collect();
-        let mut new_cells = std::collections::HashMap::new();
-        for key in keys {
-            let (r, c) = key;
-            let cv = sd.cells.remove(&key).unwrap();
+        let old_cells = std::mem::take(&mut sd.cells);
+        let mut new_cells = std::collections::HashMap::with_capacity(old_cells.len());
+        for ((r, c), cv) in old_cells {
             if c >= idx {
                 new_cells.insert((r, c + amount), cv);
             } else {
@@ -984,7 +996,12 @@ impl RustWorkbook {
                 n.1 += amount;
             }
         }
-        sd.recompute_dimensions();
+        // O(1) dimension update for inserts: min stays, max shifts
+        if let Some(mx) = sd.max_col {
+            if mx >= idx {
+                sd.max_col = Some(mx + amount);
+            }
+        }
         Ok(())
     }
 
@@ -993,11 +1010,9 @@ impl RustWorkbook {
             .sheets
             .get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
-        let keys: Vec<(u32, u16)> = sd.cells.keys().cloned().collect();
-        let mut new_cells = std::collections::HashMap::new();
-        for key in keys {
-            let (r, c) = key;
-            let cv = sd.cells.remove(&key).unwrap();
+        let old_cells = std::mem::take(&mut sd.cells);
+        let mut new_cells = std::collections::HashMap::with_capacity(old_cells.len());
+        for ((r, c), cv) in old_cells {
             if c >= idx && c < idx + amount { /* deleted */
             } else if c >= idx + amount {
                 new_cells.insert((r, c - amount), cv);
@@ -1034,70 +1049,90 @@ impl RustWorkbook {
     }
 
     fn set_sheet_visibility(&mut self, sheet: usize, state: u8) -> PyResult<()> {
-        let sd = self.sheets.get_mut(sheet)
+        let sd = self
+            .sheets
+            .get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
         sd.visibility = state;
         Ok(())
     }
 
     fn set_row_hidden(&mut self, sheet: usize, row: u32) -> PyResult<()> {
-        let sd = self.sheets.get_mut(sheet)
+        let sd = self
+            .sheets
+            .get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
         sd.hidden_rows.push(row);
         Ok(())
     }
 
     fn set_col_hidden(&mut self, sheet: usize, col: u16) -> PyResult<()> {
-        let sd = self.sheets.get_mut(sheet)
+        let sd = self
+            .sheets
+            .get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
         sd.hidden_cols.push(col);
         Ok(())
     }
 
     fn set_zoom(&mut self, sheet: usize, zoom: u16) -> PyResult<()> {
-        let sd = self.sheets.get_mut(sheet)
+        let sd = self
+            .sheets
+            .get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
         sd.zoom = Some(zoom);
         Ok(())
     }
 
     fn set_show_gridlines(&mut self, sheet: usize, show: bool) -> PyResult<()> {
-        let sd = self.sheets.get_mut(sheet)
+        let sd = self
+            .sheets
+            .get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
         sd.show_gridlines = Some(show);
         Ok(())
     }
 
     fn set_autofit(&mut self, sheet: usize, enabled: bool) -> PyResult<()> {
-        let sd = self.sheets.get_mut(sheet)
+        let sd = self
+            .sheets
+            .get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
         sd.autofit = enabled;
         Ok(())
     }
 
     fn set_row_breaks(&mut self, sheet: usize, breaks: Vec<u32>) -> PyResult<()> {
-        let sd = self.sheets.get_mut(sheet)
+        let sd = self
+            .sheets
+            .get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
         sd.row_breaks = breaks;
         Ok(())
     }
 
     fn set_col_breaks(&mut self, sheet: usize, breaks: Vec<u16>) -> PyResult<()> {
-        let sd = self.sheets.get_mut(sheet)
+        let sd = self
+            .sheets
+            .get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
         sd.col_breaks = breaks;
         Ok(())
     }
 
     fn set_row_outline_level(&mut self, sheet: usize, row: u32, level: u8) -> PyResult<()> {
-        let sd = self.sheets.get_mut(sheet)
+        let sd = self
+            .sheets
+            .get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
         sd.row_outline_levels.push((row, level));
         Ok(())
     }
 
     fn set_col_outline_level(&mut self, sheet: usize, col: u16, level: u8) -> PyResult<()> {
-        let sd = self.sheets.get_mut(sheet)
+        let sd = self
+            .sheets
+            .get_mut(sheet)
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
         sd.col_outline_levels.push((col, level));
         Ok(())
@@ -1109,6 +1144,12 @@ impl RustWorkbook {
     }
 
     fn save(&self, py: Python<'_>, path: Option<&str>) -> PyResult<PyObject> {
-        crate::save::save_workbook(&self.sheets, &self.defined_names, self.doc_properties_json.as_deref(), path, py)
+        crate::save::save_workbook(
+            &self.sheets,
+            &self.defined_names,
+            self.doc_properties_json.as_deref(),
+            path,
+            py,
+        )
     }
 }

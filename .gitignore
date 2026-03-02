@@ -3,11 +3,13 @@
 
 # Python virtualenv
 /.venv
+/.venv-win
 
 # Python bytecode
 __pycache__/
 *.py[cod]
 *.pyd
+*.pdb
 *.so
 *.dll
 

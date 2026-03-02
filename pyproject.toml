@@ -10,14 +10,21 @@ dynamic = ["version"]
 description = "Fast, Rust-backed openpyxl-compatible Excel writer"
 license = "MIT"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = ["excel", "xlsx", "openpyxl", "rust", "spreadsheet"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Rust",
     "License :: OSI Approved :: MIT License",
     "Topic :: Office/Business :: Financial :: Spreadsheet",
+    "Typing :: Typed",
 ]
 
 # --- Project URLs ---
@@ -25,6 +32,8 @@ classifiers = [
 Homepage = "https://github.com/derens99/openpyxl-rust"
 Repository = "https://github.com/derens99/openpyxl-rust"
 Documentation = "https://github.com/derens99/openpyxl-rust#readme"
+Changelog = "https://github.com/derens99/openpyxl-rust/blob/main/CHANGELOG.md"
+Issues = "https://github.com/derens99/openpyxl-rust/issues"
 
 # --- Dev dependency groups ---
 [dependency-groups]
@@ -44,7 +53,7 @@ module-name = "openpyxl_rust._openpyxl_rust"
 
 # --- Ruff: lint & format ---
 [tool.ruff]
-target-version = "py39"
+target-version = "py310"
 line-length = 120
 src = ["python", "tests", "benchmarks"]
 
@@ -63,8 +72,6 @@ ignore = [
     "E501",   # line too long (handled by formatter)
     "SIM108", # ternary operator (can reduce readability)
     "B010",   # setattr with constant (used in style classes)
-    "UP007",  # X | Y union syntax (need 3.9 compat)
-    "UP045",  # X | None syntax (need 3.9 compat)
 ]
 
 [tool.ruff.lint.isort]

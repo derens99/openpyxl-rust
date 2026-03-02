@@ -7,7 +7,7 @@ pub(crate) enum CellData {
     Boolean(bool),
     Formula(String),
     DateTime(f64, u8), // (serial, kind: 0=date, 1=time, 2=datetime)
-    RichText(String),   // JSON-serialized rich text segments
+    RichText(String),  // JSON-serialized rich text segments
     Empty,
 }
 
@@ -45,6 +45,8 @@ pub(crate) struct CellFormat {
     pub(crate) border_diagonal_down: bool,
     pub(crate) protection_locked: Option<bool>,
     pub(crate) protection_hidden: Option<bool>,
+    /// Dirty bit: true if any formatting field has been set (avoids Format::new() in save for unformatted cells).
+    pub(crate) has_format: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -65,7 +67,7 @@ pub(crate) struct SheetData {
     pub(crate) hyperlinks: Vec<(u32, u16, String, Option<String>, Option<String>)>, // (row, col, url, text, tooltip)
     pub(crate) notes: Vec<(u32, u16, String, Option<String>)>, // (row, col, text, author)
     pub(crate) autofilter: Option<(u32, u16, u32, u16)>,       // (r1, c1, r2, c2) 0-based
-    pub(crate) autofilter_columns: Vec<String>,  // JSON-serialized per-column filters
+    pub(crate) autofilter_columns: Vec<String>,                // JSON-serialized per-column filters
     pub(crate) protection_json: Option<String>,
     pub(crate) page_setup_json: Option<String>,
     #[allow(clippy::type_complexity)]
@@ -74,16 +76,16 @@ pub(crate) struct SheetData {
     pub(crate) conditional_formats: Vec<String>,
     pub(crate) tables: Vec<String>,
     pub(crate) charts: Vec<String>,
-    pub(crate) visibility: u8,                // 0=visible, 1=hidden, 2=veryHidden
-    pub(crate) hidden_rows: Vec<u32>,         // 0-based row indices
-    pub(crate) hidden_cols: Vec<u16>,         // 0-based col indices
+    pub(crate) visibility: u8,        // 0=visible, 1=hidden, 2=veryHidden
+    pub(crate) hidden_rows: Vec<u32>, // 0-based row indices
+    pub(crate) hidden_cols: Vec<u16>, // 0-based col indices
     pub(crate) zoom: Option<u16>,
     pub(crate) show_gridlines: Option<bool>,
     pub(crate) autofit: bool,
     pub(crate) row_breaks: Vec<u32>,
     pub(crate) col_breaks: Vec<u16>,
-    pub(crate) row_outline_levels: Vec<(u32, u8)>,  // (row, level)
-    pub(crate) col_outline_levels: Vec<(u16, u8)>,  // (col, level)
+    pub(crate) row_outline_levels: Vec<(u32, u8)>, // (row, level)
+    pub(crate) col_outline_levels: Vec<(u16, u8)>, // (col, level)
     pub(crate) min_row: Option<u32>,
     pub(crate) max_row: Option<u32>,
     pub(crate) min_col: Option<u16>,

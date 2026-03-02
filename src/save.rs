@@ -51,31 +51,37 @@ pub(crate) fn save_workbook(
 
         // Write cells
         for (&(row, col), cv) in &sd.cells {
-            let (fmt, has_format) = cell_format_to_xlsx_format(&cv.format);
+            // Fast path: skip Format construction entirely for unformatted cells
+            let fmt_opt = if cv.format.has_format {
+                Some(cell_format_to_xlsx_format(&cv.format).0)
+            } else {
+                None
+            };
+            let fmt_ref = fmt_opt.as_ref();
 
             match &cv.value {
                 CellData::String(s) => {
-                    if has_format {
+                    if let Some(fmt) = fmt_ref {
                         worksheet
-                            .write_string_with_format(row, col, s, &fmt)
+                            .write_string_with_format(row, col, s, fmt)
                             .map_err(xlsx_err)?;
                     } else {
                         worksheet.write_string(row, col, s).map_err(xlsx_err)?;
                     }
                 }
                 CellData::Number(n) => {
-                    if has_format {
+                    if let Some(fmt) = fmt_ref {
                         worksheet
-                            .write_number_with_format(row, col, *n, &fmt)
+                            .write_number_with_format(row, col, *n, fmt)
                             .map_err(xlsx_err)?;
                     } else {
                         worksheet.write_number(row, col, *n).map_err(xlsx_err)?;
                     }
                 }
                 CellData::Boolean(b) => {
-                    if has_format {
+                    if let Some(fmt) = fmt_ref {
                         worksheet
-                            .write_boolean_with_format(row, col, *b, &fmt)
+                            .write_boolean_with_format(row, col, *b, fmt)
                             .map_err(xlsx_err)?;
                     } else {
                         worksheet.write_boolean(row, col, *b).map_err(xlsx_err)?;
@@ -83,9 +89,9 @@ pub(crate) fn save_workbook(
                 }
                 CellData::Formula(f) => {
                     let formula = Formula::new(f);
-                    if has_format {
+                    if let Some(fmt) = fmt_ref {
                         worksheet
-                            .write_formula_with_format(row, col, formula, &fmt)
+                            .write_formula_with_format(row, col, formula, fmt)
                             .map_err(xlsx_err)?;
                     } else {
                         worksheet
@@ -94,9 +100,9 @@ pub(crate) fn save_workbook(
                     }
                 }
                 CellData::DateTime(serial, _kind) => {
-                    if has_format {
+                    if let Some(fmt) = fmt_ref {
                         worksheet
-                            .write_number_with_format(row, col, *serial, &fmt)
+                            .write_number_with_format(row, col, *serial, fmt)
                             .map_err(xlsx_err)?;
                     } else {
                         worksheet
@@ -105,9 +111,13 @@ pub(crate) fn save_workbook(
                     }
                 }
                 CellData::RichText(ref json) => {
-                    let segments: Vec<serde_json::Value> = serde_json::from_str(json).map_err(|e| {
-                        pyo3::exceptions::PyRuntimeError::new_err(format!("RichText JSON error: {}", e))
-                    })?;
+                    let segments: Vec<serde_json::Value> =
+                        serde_json::from_str(json).map_err(|e| {
+                            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                "RichText JSON error: {}",
+                                e
+                            ))
+                        })?;
 
                     // Build rich string segments
                     let mut rich_parts: Vec<(Format, String)> = Vec::new();
@@ -136,28 +146,33 @@ pub(crate) fn save_workbook(
                         }
                         if let Some(ul) = seg.get("underline").and_then(|v| v.as_str()) {
                             if ul == "single" {
-                                seg_fmt = seg_fmt.set_underline(rust_xlsxwriter::FormatUnderline::Single);
+                                seg_fmt =
+                                    seg_fmt.set_underline(rust_xlsxwriter::FormatUnderline::Single);
                             } else if ul == "double" {
-                                seg_fmt = seg_fmt.set_underline(rust_xlsxwriter::FormatUnderline::Double);
+                                seg_fmt =
+                                    seg_fmt.set_underline(rust_xlsxwriter::FormatUnderline::Double);
                             }
                         }
                         rich_parts.push((seg_fmt, text.to_string()));
                     }
 
                     // Build the segments array for write_rich_string
-                    let segments_ref: Vec<(&Format, &str)> = rich_parts.iter()
-                        .map(|(f, t)| (f, t.as_str()))
-                        .collect();
+                    let segments_ref: Vec<(&Format, &str)> =
+                        rich_parts.iter().map(|(f, t)| (f, t.as_str())).collect();
 
-                    if has_format {
-                        worksheet.write_rich_string_with_format(row, col, &segments_ref, &fmt).map_err(xlsx_err)?;
+                    if let Some(fmt) = fmt_ref {
+                        worksheet
+                            .write_rich_string_with_format(row, col, &segments_ref, fmt)
+                            .map_err(xlsx_err)?;
                     } else {
-                        worksheet.write_rich_string(row, col, &segments_ref).map_err(xlsx_err)?;
+                        worksheet
+                            .write_rich_string(row, col, &segments_ref)
+                            .map_err(xlsx_err)?;
                     }
                 }
                 CellData::Empty => {
-                    if has_format {
-                        worksheet.write_blank(row, col, &fmt).map_err(xlsx_err)?;
+                    if let Some(fmt) = fmt_ref {
+                        worksheet.write_blank(row, col, fmt).map_err(xlsx_err)?;
                     }
                 }
             }
@@ -191,20 +206,31 @@ pub(crate) fn save_workbook(
 
         // Page breaks
         if !sd.row_breaks.is_empty() {
-            worksheet.set_page_breaks(&sd.row_breaks).map_err(xlsx_err)?;
+            worksheet
+                .set_page_breaks(&sd.row_breaks)
+                .map_err(xlsx_err)?;
         }
         if !sd.col_breaks.is_empty() {
             let cols_u32: Vec<u32> = sd.col_breaks.iter().map(|&c| c as u32).collect();
-            worksheet.set_vertical_page_breaks(&cols_u32).map_err(xlsx_err)?;
+            worksheet
+                .set_vertical_page_breaks(&cols_u32)
+                .map_err(xlsx_err)?;
         }
 
         // Row outline levels (grouping)
         // Convert per-row outline levels to group_rows calls
         if !sd.row_outline_levels.is_empty() {
-            let max_level = sd.row_outline_levels.iter().map(|&(_, l)| l).max().unwrap_or(0);
+            let max_level = sd
+                .row_outline_levels
+                .iter()
+                .map(|&(_, l)| l)
+                .max()
+                .unwrap_or(0);
             for level in 1..=max_level {
                 // Find all rows with outline_level >= this level
-                let mut rows_at_level: Vec<u32> = sd.row_outline_levels.iter()
+                let mut rows_at_level: Vec<u32> = sd
+                    .row_outline_levels
+                    .iter()
                     .filter(|&&(_, l)| l >= level)
                     .map(|&(r, _)| r)
                     .collect();
@@ -234,9 +260,16 @@ pub(crate) fn save_workbook(
                     worksheet.set_column_width(col, 8.43).map_err(xlsx_err)?;
                 }
             }
-            let max_level = sd.col_outline_levels.iter().map(|&(_, l)| l).max().unwrap_or(0);
+            let max_level = sd
+                .col_outline_levels
+                .iter()
+                .map(|&(_, l)| l)
+                .max()
+                .unwrap_or(0);
             for level in 1..=max_level {
-                let mut cols_at_level: Vec<u16> = sd.col_outline_levels.iter()
+                let mut cols_at_level: Vec<u16> = sd
+                    .col_outline_levels
+                    .iter()
                     .filter(|&&(_, l)| l >= level)
                     .map(|&(c, _)| c)
                     .collect();
@@ -256,8 +289,12 @@ pub(crate) fn save_workbook(
 
         // Sheet visibility
         match sd.visibility {
-            1 => { worksheet.set_hidden(true); }
-            2 => { worksheet.set_very_hidden(true); }
+            1 => {
+                worksheet.set_hidden(true);
+            }
+            2 => {
+                worksheet.set_very_hidden(true);
+            }
             _ => {}
         }
 
@@ -272,10 +309,13 @@ pub(crate) fn save_workbook(
         }
 
         // Merged cells
-        for &(r1, c1, r2, c2) in &sd.merged_ranges {
-            worksheet
-                .merge_range(r1, c1, r2, c2, "", &Format::new())
-                .map_err(xlsx_err)?;
+        if !sd.merged_ranges.is_empty() {
+            let blank_fmt = Format::new();
+            for &(r1, c1, r2, c2) in &sd.merged_ranges {
+                worksheet
+                    .merge_range(r1, c1, r2, c2, "", &blank_fmt)
+                    .map_err(xlsx_err)?;
+            }
         }
 
         // Hyperlinks
@@ -336,7 +376,9 @@ pub(crate) fn save_workbook(
             let prot: serde_json::Value = serde_json::from_str(json_str).map_err(|e| {
                 pyo3::exceptions::PyRuntimeError::new_err(format!("Protection JSON error: {}", e))
             })?;
-            let obj = prot.as_object().unwrap();
+            let obj = prot.as_object().ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err("Protection JSON must be an object")
+            })?;
 
             let password = obj.get("password").and_then(|v| v.as_str());
 
@@ -400,7 +442,9 @@ pub(crate) fn save_workbook(
             let page: serde_json::Value = serde_json::from_str(json_str).map_err(|e| {
                 pyo3::exceptions::PyRuntimeError::new_err(format!("Page setup JSON error: {}", e))
             })?;
-            let obj = page.as_object().unwrap();
+            let obj = page.as_object().ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err("Page setup JSON must be an object")
+            })?;
 
             // Orientation
             if let Some(orient) = obj.get("orientation").and_then(|v| v.as_str()) {
@@ -1062,10 +1106,7 @@ pub(crate) fn save_workbook(
                         .map_err(xlsx_err)?;
                 }
                 "top10" => {
-                    let rank = cf_obj
-                        .get("rank")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(10) as u16;
+                    let rank = cf_obj.get("rank").and_then(|v| v.as_u64()).unwrap_or(10) as u16;
                     let percent = cf_obj
                         .get("percent")
                         .and_then(|v| v.as_bool())
@@ -1132,21 +1173,17 @@ pub(crate) fn save_workbook(
                             .and_then(|v| v.as_str())
                             .unwrap_or("containsText");
                         let rule = match op {
-                            "containsText" => {
-                                rust_xlsxwriter::ConditionalFormatTextRule::Contains(
-                                    text.to_string(),
-                                )
-                            }
+                            "containsText" => rust_xlsxwriter::ConditionalFormatTextRule::Contains(
+                                text.to_string(),
+                            ),
                             "notContains" => {
                                 rust_xlsxwriter::ConditionalFormatTextRule::DoesNotContain(
                                     text.to_string(),
                                 )
                             }
-                            "beginsWith" => {
-                                rust_xlsxwriter::ConditionalFormatTextRule::BeginsWith(
-                                    text.to_string(),
-                                )
-                            }
+                            "beginsWith" => rust_xlsxwriter::ConditionalFormatTextRule::BeginsWith(
+                                text.to_string(),
+                            ),
                             "endsWith" => rust_xlsxwriter::ConditionalFormatTextRule::EndsWith(
                                 text.to_string(),
                             ),
@@ -1307,7 +1344,6 @@ pub(crate) fn save_workbook(
             worksheet.autofit();
         }
 
-
         // Charts
         for chart_json_str in &sd.charts {
             let cv: serde_json::Value = serde_json::from_str(chart_json_str).map_err(|e| {
@@ -1419,11 +1455,19 @@ pub(crate) fn save_workbook(
                         let tl_type = tl.get("type").and_then(|v| v.as_str()).unwrap_or("linear");
                         let trendline_type = match tl_type {
                             "linear" => rust_xlsxwriter::ChartTrendlineType::Linear,
-                            "exponential" | "exp" => rust_xlsxwriter::ChartTrendlineType::Exponential,
-                            "polynomial" | "poly" => rust_xlsxwriter::ChartTrendlineType::Polynomial(2),
+                            "exponential" | "exp" => {
+                                rust_xlsxwriter::ChartTrendlineType::Exponential
+                            }
+                            "polynomial" | "poly" => {
+                                rust_xlsxwriter::ChartTrendlineType::Polynomial(2)
+                            }
                             "power" => rust_xlsxwriter::ChartTrendlineType::Power,
-                            "log" | "logarithmic" => rust_xlsxwriter::ChartTrendlineType::Logarithmic,
-                            "movingAvg" | "moving_average" => rust_xlsxwriter::ChartTrendlineType::MovingAverage(2),
+                            "log" | "logarithmic" => {
+                                rust_xlsxwriter::ChartTrendlineType::Logarithmic
+                            }
+                            "movingAvg" | "moving_average" => {
+                                rust_xlsxwriter::ChartTrendlineType::MovingAverage(2)
+                            }
                             _ => rust_xlsxwriter::ChartTrendlineType::Linear,
                         };
                         let mut trendline = rust_xlsxwriter::ChartTrendline::new();
