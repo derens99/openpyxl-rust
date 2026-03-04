@@ -20,8 +20,8 @@ jobs:
     name: Ruff
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           version: ">=0.6"
 
@@ -36,8 +36,8 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           version: ">=0.6"
 
@@ -63,7 +63,7 @@ jobs:
     name: Cargo Deny
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: EmbarkStudios/cargo-deny-action@v2
 
   # ── MSRV check ─────────────────────────────────────────────────
@@ -71,15 +71,15 @@ jobs:
     name: MSRV (Rust 1.74)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           version: ">=0.6"
 
       - name: Create venv for PyO3
         run: uv venv --python 3.12
 
-      - uses: dtolnay/rust-toolchain@1.74
+      - uses: dtolnay/rust-toolchain@1.100
 
       - uses: Swatinem/rust-cache@v2
 
@@ -110,8 +110,8 @@ jobs:
             python-version: "3.12"
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           version: ">=0.6"
           enable-cache: true
