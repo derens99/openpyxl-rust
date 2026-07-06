@@ -49,6 +49,17 @@ pub(crate) fn save_workbook(
         let worksheet = workbook.add_worksheet();
         worksheet.set_name(&sd.title).map_err(xlsx_err)?;
 
+        // Merged cells — written before values so a stored top-left value
+        // overwrites the blank placeholder that merge_range() emits.
+        if !sd.merged_ranges.is_empty() {
+            let blank_fmt = Format::new();
+            for &(r1, c1, r2, c2) in &sd.merged_ranges {
+                worksheet
+                    .merge_range(r1, c1, r2, c2, "", &blank_fmt)
+                    .map_err(xlsx_err)?;
+            }
+        }
+
         // Write cells
         for (&(row, col), cv) in &sd.cells {
             // Fast path: skip Format construction entirely for unformatted cells
@@ -308,13 +319,10 @@ pub(crate) fn save_workbook(
             worksheet.set_screen_gridlines(show);
         }
 
-        // Merged cells
-        if !sd.merged_ranges.is_empty() {
-            let blank_fmt = Format::new();
-            for &(r1, c1, r2, c2) in &sd.merged_ranges {
-                worksheet
-                    .merge_range(r1, c1, r2, c2, "", &blank_fmt)
-                    .map_err(xlsx_err)?;
+        // Tab color
+        if let Some(ref color) = sd.tab_color {
+            if let Some(clr) = parse_color_str(color) {
+                worksheet.set_tab_color(clr);
             }
         }
 

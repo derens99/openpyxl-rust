@@ -77,9 +77,15 @@ wb.save("report.xlsx")
 | Tables / ListObjects | Supported |
 | Charts (Bar, Line, Pie, Area, Scatter, etc.) | Supported |
 | Named styles | Supported |
-| Gradient fills | Not supported |
+| Load with formatting (native, no openpyxl needed) | Supported |
+| Sheet management (create at index, move, copy) | Supported |
+| move_range with formula translation | Supported |
+| Tab colors | Supported |
+| Fit-to-page print scaling | Supported |
+| Gradient fills | Not supported (upstream: rust_xlsxwriter) |
+| Split panes | Not supported (upstream: rust_xlsxwriter) |
+| Pivot tables | Not supported (upstream: rust_xlsxwriter) |
 | VBA macros | Not supported |
-| Load with formatting | Not supported |
 
 ## Performance
 
@@ -91,6 +97,18 @@ Average **3.5x speedup** over openpyxl across workloads:
 | Batch append | 3.4x |
 | Formatted cells | 4.5x |
 | Multi-sheet | 3.2x |
+
+Run the comparison framework yourself — it executes identical workloads
+through both libraries, verifies the outputs are equivalent cell-by-cell,
+and reports timings:
+
+```bash
+uv run python benchmarks/compare_framework.py                # full scale
+uv run python benchmarks/compare_framework.py --scale small  # quick run
+```
+
+The same workloads run as equivalence tests in CI
+(`tests/test_compare_framework.py`).
 
 ## How It Works
 

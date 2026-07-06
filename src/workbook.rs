@@ -1084,6 +1084,41 @@ impl RustWorkbook {
         Ok(())
     }
 
+    fn set_tab_color(&mut self, sheet: usize, color: String) -> PyResult<()> {
+        let sd = self
+            .sheets
+            .get_mut(sheet)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        sd.tab_color = Some(color);
+        Ok(())
+    }
+
+    fn move_sheet(&mut self, from: usize, to: usize) -> PyResult<()> {
+        if from >= self.sheets.len() || to >= self.sheets.len() {
+            return Err(pyo3::exceptions::PyIndexError::new_err(
+                "Sheet index out of range",
+            ));
+        }
+        let sd = self.sheets.remove(from);
+        self.sheets.insert(to, sd);
+        Ok(())
+    }
+
+    fn clone_sheet(&mut self, src: usize, title: String) -> PyResult<usize> {
+        let sd = self
+            .sheets
+            .get(src)
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Sheet index out of range"))?;
+        let mut cloned = sd.clone();
+        cloned.title = title;
+        // Match openpyxl copy_worksheet: images, charts, and tables are not copied.
+        cloned.images.clear();
+        cloned.charts.clear();
+        cloned.tables.clear();
+        self.sheets.push(cloned);
+        Ok(self.sheets.len() - 1)
+    }
+
     fn set_show_gridlines(&mut self, sheet: usize, show: bool) -> PyResult<()> {
         let sd = self
             .sheets

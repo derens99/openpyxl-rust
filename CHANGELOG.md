@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **NamedStyle support** — `NamedStyle` class in `openpyxl_rust.styles`, `Workbook.add_named_style()` / `Workbook.named_styles`, and `cell.style` getter/setter. Styles apply their font, fill, border, alignment, number format, and protection components to cells; assigning a `NamedStyle` object directly to `cell.style` auto-registers it, matching openpyxl behavior.
+- **Sheet management** — `Workbook.create_sheet(title, index=...)`, `Workbook.move_sheet(sheet, offset=...)`, and `Workbook.copy_worksheet(ws)` (copies values, formats, dimensions, and merges; not images/charts/tables, matching openpyxl)
+- **`Worksheet.move_range()`** — moves values and formats, clears origins, overwrites destinations; `translate=True` shifts relative formula references ($-absolute components preserved, out-of-bounds references become `#REF!`)
+- **Tab colors** — `ws.sheet_properties.tabColor` roundtrips through save and load
+- **Native formatting loader** — `load_workbook(path, data_only=False)` now parses the xlsx package directly (fonts, fills, borders, alignment, number formats, dates, formulas, hyperlinks, comments, merged cells, dimensions, freeze panes, tab colors, defined names) with no runtime openpyxl dependency
+- **Comparison framework** (`benchmarks/compare_framework.py`) — defines each workload once against the shared API, runs it through both openpyxl and openpyxl_rust, verifies the outputs are equivalent cell-by-cell, and reports median timings and speedups; wired into CI via `tests/test_compare_framework.py`
+- **Fit-to-page** parity test unskipped — `fitToWidth`/`fitToHeight` already roundtripped for non-default values (values of 1 are the OOXML spec default and are omitted, with `fitToPage` set)
+
+### Fixed
+- **Merged top-left cell values were lost on save** — `merge_range()` was emitted after cell values and blanked the anchor cell; merges are now written first so stored values win (found by the comparison framework's equivalence checker)
 
 ### Fixed
 - **save.rs crash on malformed protection JSON** — two `.unwrap()` calls on `as_object()` replaced with proper `PyRuntimeError` propagation (would panic/crash Python on malformed sheet-protection or conditional-format JSON)

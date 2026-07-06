@@ -201,17 +201,39 @@ class TestSheetManagementParity:
         rb = _save_and_reopen(wb, tmp_path)
         assert rb.sheetnames == ["First", "Second", "Third"]
 
-    @pytest.mark.skip(reason="not yet implemented: create_sheet with index parameter")
     def test_create_sheet_at_index(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        wb.active.title = "First"
+        wb.create_sheet("Third")
+        wb.create_sheet("Second", index=1)
+        rb = _save_and_reopen(wb, tmp_path)
+        assert rb.sheetnames == ["First", "Second", "Third"]
 
-    @pytest.mark.skip(reason="not yet implemented: copy_worksheet")
     def test_copy_worksheet(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        ws = wb.active
+        ws.title = "Source"
+        ws["A1"] = "hello"
+        ws["A1"].font = Font(bold=True)
+        ws["B2"] = 42
+        ws.merge_cells("C1:D2")
+        copy = wb.copy_worksheet(ws)
+        assert copy.title == "Source Copy"
+        rb = _save_and_reopen(wb, tmp_path)
+        cs = rb["Source Copy"]
+        assert cs["A1"].value == "hello"
+        assert cs["A1"].font.bold is True
+        assert cs["B2"].value == 42
+        assert any(str(m) == "C1:D2" for m in cs.merged_cells.ranges)
 
-    @pytest.mark.skip(reason="not yet implemented: move_sheet")
     def test_move_sheet(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        wb.active.title = "A"
+        wb.create_sheet("B")
+        wb.create_sheet("C")
+        wb.move_sheet("C", offset=-2)
+        rb = _save_and_reopen(wb, tmp_path)
+        assert rb.sheetnames == ["C", "A", "B"]
 
     def test_sheet_visibility(self, tmp_path):
         wb = RustWorkbook()
@@ -1563,17 +1585,19 @@ class TestPrintSetupParity:
         rb = _save_and_reopen(wb, tmp_path)
         assert rb.active.print_title_rows is not None or rb.active.print_titles is not None
 
-    @pytest.mark.skip(reason="not yet implemented: fitToWidth/fitToHeight not roundtripped by rust_xlsxwriter")
     def test_fit_to_page(self, tmp_path):
+        # Values of 1 are the OOXML defaults and are omitted from the XML, so
+        # use non-default values to verify the real roundtrip.
         wb = RustWorkbook()
         ws = wb.active
         ws["A1"] = "fit"
-        ws.page_setup.fitToWidth = 1
-        ws.page_setup.fitToHeight = 1
+        ws.page_setup.fitToWidth = 2
+        ws.page_setup.fitToHeight = 3
         rb = _save_and_reopen(wb, tmp_path)
         ps = rb.active.page_setup
-        assert ps.fitToWidth == 1
-        assert ps.fitToHeight == 1
+        assert ps.fitToWidth == 2
+        assert ps.fitToHeight == 3
+        assert rb.active.sheet_properties.pageSetUpPr.fitToPage is True
 
     def test_center_horizontally(self, tmp_path):
         wb = RustWorkbook()
@@ -2104,9 +2128,14 @@ class TestFormulasParity:
         rb = _save_and_reopen(wb, tmp_path)
         assert rb.active["A1"].data_type == "f"
 
-    @pytest.mark.skip(reason="not yet implemented: move_range with formula translation")
-    def test_move_range_translate(self, tmp_path):
-        pass
+    def test_move_range_translate_formulas(self, tmp_path):
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = 1
+        ws["A2"] = "=A1*2"
+        ws.move_range("A2:A2", rows=0, cols=2, translate=True)
+        rb = _save_and_reopen(wb, tmp_path)
+        assert rb.active["C2"].value == "=C1*2"
 
 
 # ---------------------------------------------------------------------------
@@ -2218,9 +2247,16 @@ class TestRowColOpsParity:
         assert rb.active["A1"].value == "keep"
         assert rb.active["B1"].value == "shift_left"
 
-    @pytest.mark.skip(reason="not yet implemented: move_range")
     def test_move_range(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "x"
+        ws["B1"] = "y"
+        ws.move_range("A1:B1", rows=2, cols=0)
+        rb = _save_and_reopen(wb, tmp_path)
+        assert rb.active["A1"].value is None
+        assert rb.active["A3"].value == "x"
+        assert rb.active["B3"].value == "y"
 
 
 # ===========================================================================
@@ -2405,22 +2441,46 @@ class TestPivotTablesParity:
 # 30. Move Range
 # ---------------------------------------------------------------------------
 class TestMoveRangeParity:
-    @pytest.mark.skip(reason="not yet implemented: move_range shift cells")
     def test_move_range_basic(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "a"
+        ws["A2"] = "b"
+        ws["B1"] = 1
+        ws["B2"] = 2
+        ws.move_range("A1:B2", rows=3, cols=2)
+        rb = _save_and_reopen(wb, tmp_path)
+        assert rb.active["A1"].value is None
+        assert rb.active["C4"].value == "a"
+        assert rb.active["C5"].value == "b"
+        assert rb.active["D4"].value == 1
+        assert rb.active["D5"].value == 2
 
-    @pytest.mark.skip(reason="not yet implemented: move_range translate formulas")
     def test_move_range_translate(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = 10
+        ws["A2"] = 20
+        ws["A3"] = "=SUM(A1:A2)"
+        ws["B3"] = "=$A$1+A2"
+        ws.move_range("A3:B3", rows=1, cols=1, translate=True)
+        rb = _save_and_reopen(wb, tmp_path)
+        assert rb.active["B4"].value == "=SUM(B2:B3)"
+        assert rb.active["C4"].value == "=$A$1+B3"
+        assert rb.active["A3"].value is None
 
 
 # ---------------------------------------------------------------------------
 # 31. Advanced Features (unique stubs not covered by other classes)
 # ---------------------------------------------------------------------------
 class TestAdvancedFeaturesParity:
-    @pytest.mark.skip(reason="not yet implemented: tab color")
     def test_tab_color(self, tmp_path):
-        pass
+        wb = RustWorkbook()
+        ws = wb.active
+        ws["A1"] = "colored tab"
+        ws.sheet_properties.tabColor = "1072BA"
+        rb = _save_and_reopen(wb, tmp_path)
+        assert rb.active.sheet_properties.tabColor.rgb == "FF1072BA"
 
     @pytest.mark.skip(reason="not yet implemented: sparklines")
     def test_sparklines(self, tmp_path):

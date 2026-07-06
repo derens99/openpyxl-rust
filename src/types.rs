@@ -81,6 +81,7 @@ pub(crate) struct SheetData {
     pub(crate) hidden_cols: Vec<u16>, // 0-based col indices
     pub(crate) zoom: Option<u16>,
     pub(crate) show_gridlines: Option<bool>,
+    pub(crate) tab_color: Option<String>,
     pub(crate) autofit: bool,
     pub(crate) row_breaks: Vec<u32>,
     pub(crate) col_breaks: Vec<u16>,
@@ -118,6 +119,7 @@ impl SheetData {
             hidden_cols: Vec::new(),
             zoom: None,
             show_gridlines: None,
+            tab_color: None,
             autofit: false,
             row_breaks: Vec::new(),
             col_breaks: Vec::new(),

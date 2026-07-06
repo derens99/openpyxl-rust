@@ -46,16 +46,14 @@ def load_workbook(filename, data_only=True):
         filename: A file path (str or Path), or a file-like object with a
                   .read() method (e.g. BytesIO, open file handle).
         data_only: If True (default), uses calamine (Rust) for fast reading
-                   (values only, no formatting). If False, uses openpyxl under
-                   the hood for full formatting preservation (read-modify-write).
+                   (values only, no formatting). If False, parses the xlsx
+                   package directly for full formatting preservation
+                   (read-modify-write) — no openpyxl required.
     """
     if not data_only:
-        import openpyxl as _openpyxl
+        from openpyxl_rust.native_loader import load_workbook_native
 
-        from openpyxl_rust.loader import _convert_openpyxl_to_rust
-
-        src = _openpyxl.load_workbook(filename, data_only=False)
-        return _convert_openpyxl_to_rust(src)
+        return load_workbook_native(filename)
     import os
     from datetime import datetime
 

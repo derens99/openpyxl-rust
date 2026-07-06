@@ -82,11 +82,76 @@ class Workbook:
             i += 1
         return f"{title}{i}"
 
-    def create_sheet(self, title=None):
+    def _reindex_sheets(self):
+        """Sync each worksheet's _sheet_idx with its position (mirrors the Rust sheet order)."""
+        for i, ws in enumerate(self._sheets):
+            ws._sheet_idx = i
+
+    def create_sheet(self, title=None, index=None):
         title = title or f"Sheet{len(self._sheets) + 1}"
         title = self._unique_sheet_title(title)
         idx = self._rust_wb.add_sheet(title)
         ws = Worksheet(title=title, workbook=self, sheet_idx=idx)
+        if index is None:
+            self._sheets.append(ws)
+        else:
+            self._sheets.insert(index, ws)
+            self._rust_wb.move_sheet(idx, self._sheets.index(ws))
+            self._reindex_sheets()
+        return ws
+
+    def move_sheet(self, sheet, offset=0):
+        """Move a worksheet (or sheet name) by offset within the workbook order."""
+        if isinstance(sheet, str):
+            sheet = self[sheet]
+        if sheet not in self._sheets:
+            raise ValueError("Worksheet is not part of this workbook")
+        old = self._sheets.index(sheet)
+        self._sheets.pop(old)
+        self._sheets.insert(old + offset, sheet)
+        self._rust_wb.move_sheet(old, self._sheets.index(sheet))
+        self._reindex_sheets()
+
+    def copy_worksheet(self, from_worksheet):
+        """Copy a worksheet within this workbook.
+
+        Like openpyxl, cell values, styles, dimensions, and merged cells are
+        copied; images, charts, and tables are not.
+        """
+        from openpyxl_rust.cell import Cell
+
+        if from_worksheet not in self._sheets:
+            raise ValueError("Worksheet is not part of this workbook")
+        title = self._unique_sheet_title(f"{from_worksheet.title} Copy")
+        idx = self._rust_wb.clone_sheet(from_worksheet._sheet_idx, title)
+        ws = Worksheet(title=title, workbook=self, sheet_idx=idx)
+        # Rust clone already carries values and merges; copy the Python-side
+        # mirrors directly (no re-adding to Rust).
+        ws.merged_cell_ranges = list(from_worksheet.merged_cell_ranges)
+        ws.freeze_panes = from_worksheet.freeze_panes
+        for letter, dim in from_worksheet.column_dimensions.items():
+            new_dim = ws.column_dimensions[letter]
+            new_dim.width = dim.width
+            new_dim.hidden = dim.hidden
+            new_dim.outline_level = dim.outline_level
+        for num, dim in from_worksheet.row_dimensions.items():
+            new_dim = ws.row_dimensions[num]
+            new_dim.height = dim.height
+            new_dim.hidden = dim.hidden
+            new_dim.outline_level = dim.outline_level
+        # Formats live on Python proxies until save; clone them onto the copy.
+        for (r, c), src in from_worksheet._formatted_cells.items():
+            dst = Cell(row=r, column=c, worksheet=ws)
+            dst._font = src._font
+            dst._fill = src._fill
+            dst._border = src._border
+            dst._alignment = src._alignment
+            dst._protection = src._protection
+            dst._number_format = src._number_format
+            dst._hyperlink = src._hyperlink
+            dst._comment = src._comment
+            dst._style_name = src._style_name
+            ws._formatted_cells[(r, c)] = dst
         self._sheets.append(ws)
         return ws
 

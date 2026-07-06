@@ -41,6 +41,46 @@ def _parse_cell_ref(ref_str):
     return int(row_str), col
 
 
+# Cell reference inside a formula: optional $ before column and row. The
+# trailing lookahead rejects function names like LOG10( and defined names
+# that continue with word characters.
+_FORMULA_REF_RE = re.compile(r"(?<![A-Za-z0-9_$])(\$?)([A-Za-z]{1,3})(\$?)([0-9]+)(?![A-Za-z0-9_(])")
+_QUOTED_STRING_RE = re.compile(r'("(?:[^"]|"")*")')
+_MAX_COL = 16384  # XFD
+_MAX_ROW = 1048576
+
+
+def _translate_formula(formula, rows, cols):
+    """Shift relative cell references in a formula by (rows, cols).
+
+    Absolute components ($A, $1) are left untouched; string literals are
+    skipped; references shifted off the sheet become #REF!.
+    """
+
+    def shift_ref(m):
+        col_abs, col_letters, row_abs, row_str = m.groups()
+        col = 0
+        for ch in col_letters.upper():
+            col = col * 26 + (ord(ch) - 64)
+        row = int(row_str)
+        if col > _MAX_COL:
+            return m.group(0)  # not a real column (e.g. a defined name)
+        if not col_abs:
+            col += cols
+        if not row_abs:
+            row += rows
+        if col < 1 or row < 1 or col > _MAX_COL or row > _MAX_ROW:
+            return "#REF!"
+        letters = col_letters if col_abs else _col_letter(col)
+        return f"{col_abs}{letters}{row_abs}{row if not row_abs else row_str}"
+
+    # Translate outside quoted string literals only.
+    segments = _QUOTED_STRING_RE.split(formula)
+    for i in range(0, len(segments), 2):
+        segments[i] = _FORMULA_REF_RE.sub(shift_ref, segments[i])
+    return "".join(segments)
+
+
 class ColumnDimension:
     def __init__(self):
         self.width = None
@@ -108,6 +148,13 @@ class _ConditionalFormattingList:
         self._rules.append((range_string, rule))
 
 
+class _SheetProperties:
+    """Mirror of openpyxl's WorksheetProperties (tabColor only for now)."""
+
+    def __init__(self):
+        self.tabColor = None
+
+
 class Worksheet:
     ORIENTATION_PORTRAIT = "portrait"
     ORIENTATION_LANDSCAPE = "landscape"
@@ -139,6 +186,7 @@ class Worksheet:
         self._tables = []
         self._charts = []
         self._sheet_state = "visible"
+        self.sheet_properties = _SheetProperties()
         self._zoom_scale = None
         self._show_gridlines = True
         self._autofit = False
@@ -603,6 +651,44 @@ class Worksheet:
             new_merged.append((_col_letter(c1) + str(r1), _col_letter(c2) + str(r2)))
         self.merged_cell_ranges = new_merged
 
+    # ---- Move range ----
+
+    def move_range(self, cell_range, rows=0, cols=0, translate=False):
+        """Move a range of cells by the given number of rows/columns.
+
+        Values and formats move with the cells; the origin cells are cleared
+        and destination cells are overwritten. With translate=True, relative
+        references in moved formulas are shifted by the same offset.
+        """
+        if not isinstance(cell_range, str):
+            cell_range = str(cell_range)
+        parts = cell_range.split(":")
+        r1, c1 = _parse_cell_ref(parts[0].upper())
+        r2, c2 = _parse_cell_ref(parts[-1].upper())
+        if rows == 0 and cols == 0:
+            return
+        if r1 + rows < 1 or c1 + cols < 1:
+            raise ValueError("Cannot move range outside the worksheet")
+
+        moved = {}
+        for r in range(r1, r2 + 1):
+            for c in range(c1, c2 + 1):
+                val = self._get_cell_value(r, c)
+                proxy = self._formatted_cells.pop((r, c), None)
+                moved[(r, c)] = (val, proxy)
+                self._set_cell_value(r, c, None)
+
+        for (r, c), (val, proxy) in moved.items():
+            nr, nc = r + rows, c + cols
+            self._formatted_cells.pop((nr, nc), None)  # destination is overwritten
+            if translate and isinstance(val, str) and val.startswith("="):
+                val = _translate_formula(val, rows, cols)
+            self._set_cell_value(nr, nc, val)
+            if proxy is not None:
+                proxy._row = nr
+                proxy._col = nc
+                self._formatted_cells[(nr, nc)] = proxy
+
     # ---- Images / Validation ----
 
     def add_image(self, img, anchor=None):
@@ -763,6 +849,15 @@ class Worksheet:
         # Zoom
         if self._zoom_scale is not None:
             wb.set_zoom(idx, int(self._zoom_scale))
+
+        # Tab color
+        if self.sheet_properties.tabColor is not None:
+            color = self.sheet_properties.tabColor
+            rgb = getattr(color, "rgb", color)  # accept plain hex strings or Color-like objects
+            if isinstance(rgb, str):
+                if len(rgb) == 8:
+                    rgb = rgb[2:]  # strip ARGB alpha prefix
+                wb.set_tab_color(idx, rgb)
 
         # Gridlines
         if not self._show_gridlines:

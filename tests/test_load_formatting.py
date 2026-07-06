@@ -258,3 +258,110 @@ class TestLoadWithFormatting:
         wb = load_workbook(path, data_only=False)
         ws = wb.active
         assert ws.column_dimensions["A"].width == 25
+
+
+class TestNativeLoaderExtras:
+    """Coverage for the native (openpyxl-free) formatting loader."""
+
+    def _make(self, path):
+        from datetime import date, datetime
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws["A1"] = datetime(2024, 3, 15, 10, 30, 0)
+        ws["A2"] = date(2023, 12, 25)
+        ws["A3"] = 42
+        ws["A4"] = 3.5
+        ws["A5"] = True
+        ws["A6"] = "=SUM(A3:A4)"
+        ws["B1"] = "link"
+        ws["B1"].hyperlink = "https://example.com"
+        from openpyxl.comments import Comment as OComment
+
+        ws["B2"] = "commented"
+        ws["B2"].comment = OComment("note text", "author x")
+        ws.sheet_properties.tabColor = "FF00FF00"
+        ws.row_dimensions[3].height = 42
+        wb.defined_names.add(openpyxl.workbook.defined_name.DefinedName("myname", attr_text="Sheet!$A$1"))
+        wb.save(path)
+
+    def test_datetime_and_date_values(self, tmp_path):
+        from datetime import date, datetime
+
+        path = str(tmp_path / "n.xlsx")
+        self._make(path)
+        wb = load_workbook(path, data_only=False)
+        ws = wb.active
+        assert ws["A1"].value == datetime(2024, 3, 15, 10, 30, 0)
+        v = ws["A2"].value
+        if isinstance(v, datetime):
+            v = v.date()
+        assert v == date(2023, 12, 25)
+
+    def test_numeric_types(self, tmp_path):
+        path = str(tmp_path / "n.xlsx")
+        self._make(path)
+        ws = load_workbook(path, data_only=False).active
+        assert ws["A3"].value == 42
+        assert ws["A4"].value == 3.5
+        assert ws["A5"].value is True
+
+    def test_formula_preserved(self, tmp_path):
+        path = str(tmp_path / "n.xlsx")
+        self._make(path)
+        ws = load_workbook(path, data_only=False).active
+        assert ws["A6"].value == "=SUM(A3:A4)"
+
+    def test_hyperlink(self, tmp_path):
+        path = str(tmp_path / "n.xlsx")
+        self._make(path)
+        ws = load_workbook(path, data_only=False).active
+        assert ws["B1"].hyperlink == "https://example.com"
+
+    def test_comment(self, tmp_path):
+        path = str(tmp_path / "n.xlsx")
+        self._make(path)
+        ws = load_workbook(path, data_only=False).active
+        assert ws["B2"].comment is not None
+        assert "note text" in ws["B2"].comment.text
+        assert ws["B2"].comment.author == "author x"
+
+    def test_tab_color(self, tmp_path):
+        path = str(tmp_path / "n.xlsx")
+        self._make(path)
+        ws = load_workbook(path, data_only=False).active
+        assert ws.sheet_properties.tabColor == "00FF00"
+
+    def test_row_height(self, tmp_path):
+        path = str(tmp_path / "n.xlsx")
+        self._make(path)
+        ws = load_workbook(path, data_only=False).active
+        assert ws.row_dimensions[3].height == 42
+
+    def test_defined_names(self, tmp_path):
+        path = str(tmp_path / "n.xlsx")
+        self._make(path)
+        wb = load_workbook(path, data_only=False)
+        assert "myname" in wb.defined_names
+
+    def test_load_from_filelike(self, tmp_path):
+        import io
+
+        path = str(tmp_path / "n.xlsx")
+        self._make(path)
+        with open(path, "rb") as f:
+            buf = io.BytesIO(f.read())
+        ws = load_workbook(buf, data_only=False).active
+        assert ws["A3"].value == 42
+
+    def test_roundtrip_after_native_load(self, tmp_path):
+        """Load natively, save, and read back with openpyxl."""
+        path = str(tmp_path / "n.xlsx")
+        out = str(tmp_path / "out.xlsx")
+        self._make(path)
+        wb = load_workbook(path, data_only=False)
+        wb.save(out)
+        rb = openpyxl.load_workbook(out)
+        assert rb.active["A3"].value == 42
+        assert rb.active["A6"].value == "=SUM(A3:A4)"
+        assert rb.active["B2"].comment is not None
