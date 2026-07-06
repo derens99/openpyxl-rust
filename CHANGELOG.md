@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **NamedStyle support** — `NamedStyle` class in `openpyxl_rust.styles`, `Workbook.add_named_style()` / `Workbook.named_styles`, and `cell.style` getter/setter. Styles apply their font, fill, border, alignment, number format, and protection components to cells; assigning a `NamedStyle` object directly to `cell.style` auto-registers it, matching openpyxl behavior.
+
 ### Fixed
 - **save.rs crash on malformed protection JSON** — two `.unwrap()` calls on `as_object()` replaced with proper `PyRuntimeError` propagation (would panic/crash Python on malformed sheet-protection or conditional-format JSON)
 - **set_rows_batch inserting Empty entries for None cells** — `CellData::Empty` was stored for every `None` in batch writes, bloating the HashMap; now skips `None` values entirely

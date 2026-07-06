@@ -2,6 +2,7 @@ import json
 import os
 
 from openpyxl_rust.properties import DocumentProperties
+from openpyxl_rust.styles.named_styles import NamedStyle
 from openpyxl_rust.worksheet import Worksheet
 
 
@@ -39,6 +40,7 @@ class Workbook:
         self._active_sheet_index = 0
         self.defined_names = _DefinedNames(self)
         self.properties = DocumentProperties()
+        self._named_styles = {"Normal": NamedStyle(name="Normal", builtinId=0)}
 
     @property
     def active(self):
@@ -106,6 +108,16 @@ class Workbook:
                 self._active_sheet_index -= 1
         else:
             self._active_sheet_index = 0
+
+    @property
+    def named_styles(self):
+        return list(self._named_styles)
+
+    def add_named_style(self, style):
+        """Register a NamedStyle so cells can reference it by name."""
+        if style.name in self._named_styles:
+            raise ValueError(f"Style {style.name} exists already")
+        self._named_styles[style.name] = style
 
     @property
     def sheetnames(self):

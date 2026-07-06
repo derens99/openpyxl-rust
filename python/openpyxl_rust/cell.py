@@ -111,6 +111,7 @@ class Cell:
         "_number_format",
         "_protection",
         "_row",
+        "_style_name",
         "_value",
         "_ws",
     )
@@ -137,6 +138,7 @@ class Cell:
         self._hyperlink = None
         self._comment = None
         self._protection = None
+        self._style_name = None
         if value is not None:
             if worksheet is not None and worksheet._workbook is not None:
                 worksheet._set_cell_value(row, column, value)
@@ -263,6 +265,39 @@ class Cell:
     @protection.setter
     def protection(self, val):
         self._protection = val
+        self._mark_formatted()
+
+    @property
+    def style(self):
+        return self._style_name if self._style_name is not None else "Normal"
+
+    @style.setter
+    def style(self, val):
+        from openpyxl_rust.styles.named_styles import NamedStyle
+
+        wb = self._ws._workbook if self._ws is not None else None
+        if isinstance(val, NamedStyle):
+            if wb is not None and val.name not in wb._named_styles:
+                wb.add_named_style(val)
+            style = val
+        else:
+            if wb is None or val not in wb._named_styles:
+                raise ValueError(f"{val} is not a known style")
+            style = wb._named_styles[val]
+
+        if style.font is not None:
+            self.font = style.font
+        if style.fill is not None:
+            self.fill = style.fill
+        if style.border is not None:
+            self.border = style.border
+        if style.alignment is not None:
+            self.alignment = style.alignment
+        if style.protection is not None:
+            self.protection = style.protection
+        if style.number_format is not None:
+            self.number_format = style.number_format
+        self._style_name = style.name
         self._mark_formatted()
 
     def _mark_formatted(self):

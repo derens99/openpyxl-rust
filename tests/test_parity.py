@@ -727,9 +727,33 @@ class TestCellStylesParity:
         assert c.alignment.horizontal == "center"
         assert c.number_format == "0.00"
 
-    @pytest.mark.skip(reason="not yet implemented: NamedStyle")
     def test_named_style(self, tmp_path):
-        pass
+        from openpyxl_rust.styles import NamedStyle
+
+        wb = RustWorkbook()
+        ws = wb.active
+        highlight = NamedStyle(
+            name="highlight",
+            font=Font(bold=True, size=14, color="FF0000"),
+            fill=PatternFill(fill_type="solid", start_color="FFFF00"),
+            alignment=Alignment(horizontal="center"),
+            number_format="0.00",
+        )
+        wb.add_named_style(highlight)
+        assert wb.named_styles == ["Normal", "highlight"]
+
+        ws["A1"] = 3.14159
+        ws["A1"].style = "highlight"
+        assert ws["A1"].style == "highlight"
+        wb.save(str(tmp_path / "test.xlsx"))
+
+        rb = real_openpyxl.load_workbook(str(tmp_path / "test.xlsx"))
+        c = rb.active["A1"]
+        assert c.font.bold is True
+        assert c.font.size == 14
+        assert c.fill.patternType == "solid"
+        assert c.alignment.horizontal == "center"
+        assert c.number_format == "0.00"
 
     def test_cell_protection(self, tmp_path):
         from openpyxl_rust.styles import Protection

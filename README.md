@@ -76,8 +76,8 @@ wb.save("report.xlsx")
 | Load workbook (data only) | Supported |
 | Tables / ListObjects | Supported |
 | Charts (Bar, Line, Pie, Area, Scatter, etc.) | Supported |
+| Named styles | Supported |
 | Gradient fills | Not supported |
-| Named styles | Not supported |
 | VBA macros | Not supported |
 | Load with formatting | Not supported |
 
